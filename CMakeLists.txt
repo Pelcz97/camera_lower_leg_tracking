@@ -8,6 +8,7 @@ project(camera_lower_leg_tracking)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS roscpp pcl_ros  sensor_msgs genmsg)
+find_package(PCL 1.7 REQUIRED)
 include_directories(${catkin_INCLUDE_DIRS})
 
 ## System dependencies are found with CMake's conventions
