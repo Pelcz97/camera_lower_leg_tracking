@@ -1,44 +1,53 @@
 #include "ros/ros.h" 
-
+#include "../include/pcl_types.h"
 #include <sensor_msgs/PointCloud2.h>
- #include "pcl_ros/point_cloud.h"
+#include <pcl/common/projection_matrix.h>
+#include "pcl_ros/point_cloud.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/conversions.h>
 #include <pcl_ros/transforms.h>
+#include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/Twist.h>
+#include <tf2/convert.h>
 
-#define GND_LEVEL (0.3)
+
+#define GND_LEVEL (0.03)
 
 
 ros::Publisher pub;
 
-void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input_msg)
-{
-    pcl::PointCloud<pcl::PointXYZRGB> output;
+void cloud_cb (const Cloud_cptr& input_cloud)
+{    
+    /*
+    tf2_ros::Buffer tfBuffer;
+    tf2_ros::TransformListener tfListener(tfBuffer);
+    sensor_msgs::PointCloud2 cloud_in_tr;
     
-    pcl::PCLPointCloud2 input;
-    pcl_conversions::toPCL(*input_msg,input);
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr input_pt_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::fromPCLPointCloud2(input,*input_pt_cloud);
+    geometry_msgs::TransformStamped transformStamped;
     
-
-  ROS_INFO("PCL RECEIVED");
-  // Do some Data Processing here
-  
     
-  
-  std::vector<int> indices;
-  for( size_t i = 0; i < input_pt_cloud->points.size(); i++ ){
-    	float z = input_pt_cloud->points[i].z;
-        if( z > GND_LEVEL ){
-            indices.push_back(i);
+    try {
+        transformStamped = tfBuffer.lookupTransform("base_link", "camera_link", ros::Time(0));
+        std::cout << transformStamped << std::endl;
+        tf2::doTransform(input_cloud, cloud_in_tr, transformStamped);
+    }
+    catch (tf2::TransformException &ex) {
+            ROS_WARN("%s", ex.what());
+    }    
+    */
+    Indices object_indices;
+    for( size_t i = 0; i < input_cloud->size(); i++ ){
+    	float z = input_cloud->points[i].z;
+        if( z > GND_LEVEL) {
+            object_indices.push_back(i);
         }
     }
- 
-  copyPointCloud(*input_pt_cloud, output);
-    
+    Cloud output(*input_cloud, object_indices );
+
   // Publish the data.
   pub.publish (output);
 }

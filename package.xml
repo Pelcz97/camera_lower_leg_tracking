@@ -54,6 +54,10 @@
   <depend>pcl_ros</depend>
   <depend>message_runtime</depend>
   <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>geometry_msgs</depend>
+
   
 
   <!-- The export tag contains other, unspecified, tags -->

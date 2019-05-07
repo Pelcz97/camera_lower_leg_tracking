@@ -7,7 +7,15 @@ project(camera_lower_leg_tracking)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp pcl_ros  sensor_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS roscpp
+    pcl_ros
+    sensor_msgs
+    genmsg
+    geometry_msgs
+    tf2
+    tf2_ros
+    tf2_msgs
+    tf2_sensor_msgs)
 find_package(PCL 1.7 REQUIRED)
 include_directories(${catkin_INCLUDE_DIRS})
 
@@ -101,9 +109,9 @@ include_directories(${catkin_INCLUDE_DIRS})
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+  INCLUDE_DIRS include
   LIBRARIES camera_lower_leg_tracking
-  CATKIN_DEPENDS roscpp sensor_msgs message_runtime 
+  CATKIN_DEPENDS roscpp sensor_msgs message_runtime geometry_msgs
  # DEPENDS system_lib
 )
 
