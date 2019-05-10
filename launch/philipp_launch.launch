@@ -1,0 +1,7 @@
+<launch>
+ 
+  <node pkg="camera_lower_leg_tracking" name="remove_gnd" type="remove_gnd" />
+  <node pkg="camera_lower_leg_tracking" name="split_legs" type="split_legs" />
+
+
+</launch>

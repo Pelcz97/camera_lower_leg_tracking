@@ -142,6 +142,9 @@ catkin_package(
 add_executable(remove_gnd src/remove_gnd.cpp)
 target_link_libraries(remove_gnd ${catkin_LIBRARIES})
 
+add_executable(split_legs src/split_legs.cpp)
+target_link_libraries(split_legs ${catkin_LIBRARIES})
+
 
 
 ## Rename C++ executable without prefix
