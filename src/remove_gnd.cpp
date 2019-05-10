@@ -8,6 +8,7 @@
 
 #include <pcl_ros/transforms.h>
 #include "pcl_ros/point_cloud.h"
+#include <pcl/filters/voxel_grid.h>
 
 #include <geometry_msgs/TransformStamped.h>
 
@@ -30,7 +31,17 @@ geometry_msgs::TransformStamped transformStamped;
 void cloud_cb (const Cloud_cptr& input_cloud)
 {    
     
-    Cloud input_cloud_tr;
+    
+    // Create the filtering object: downsample the dataset using a leaf size of 1cm
+    ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud->points.size());
+    pcl::VoxelGrid<Point> vg;
+    Cloud_ptr cloud_filtered (new Cloud);
+    vg.setInputCloud (input_cloud);
+    vg.setLeafSize (0.01f, 0.01f, 0.01f);
+    vg.filter (*cloud_filtered);
+    ROS_INFO("PointCloud before filtering has: %lu data points", cloud_filtered->points.size());
+    
+    Cloud input_cloud_tr = *cloud_filtered;
     sensor_msgs::PointCloud2 sens_msg_input_cloud, sens_msg_input_cloud_tr;
     
     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
