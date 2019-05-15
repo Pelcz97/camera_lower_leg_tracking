@@ -39,7 +39,7 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
 //     Cloud_cptr cloud_filtered = input_cloud;
 
   if (cloud_filtered->empty()) {
-      ROS_INFO("NO CLUSTER FOUND");
+      ROS_INFO("Input is empty");
       return;
   }
   
@@ -50,7 +50,7 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   //Setting the parameters for cluster extraction
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<Point> ec;
-  ec.setClusterTolerance (0.05); // 5cm
+  ec.setClusterTolerance (0.03); // 5cm
   ec.setMinClusterSize (100);
   ec.setMaxClusterSize (2000);
   ec.setSearchMethod (tree);
@@ -58,21 +58,20 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   ec.extract (cluster_indices);
   
   
-  ROS_INFO("Cluster Count: %lu", cluster_indices.size());
-  for (int i = 0; i < cluster_indices.size(); i++) {
-      ROS_INFO("Cluster %d has %lu points", i, cluster_indices.at(i).indices.size());
-  }
-  
-  
+  int i = 0;
   std::vector<Cloud> clusters;
   //Creating PointClouds for each cluster. clusters is sorted by the size of the cluster.
   for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
   {
+    ROS_INFO("Cluster %d has %lu points", i++, cluster_indices.at(i).indices.size());
     Cloud cloud_cluster(*cloud_filtered, it->indices );
     clusters.push_back(cloud_cluster);
   }
   
-  if (clusters.size() == 1) {
+  if (clusters.size() == 0) {
+      ROS_INFO("NO CLUSTER FOUND");
+  }
+  else if (clusters.size() == 1) {
   Cloud fst_leg = clusters.at(0);
   
   ROS_INFO("One Cluster published");
@@ -103,8 +102,6 @@ int main (int argc, char** argv)
   ros::init (argc, argv, "split_legs");
   ros::NodeHandle nh;
   
-  ROS_INFO("Started");
-
   // Create a ROS subscriber for the input point cloud
   ros::Subscriber sub = nh.subscribe ("gnd_removed", 1000, cloud_cb);
 
