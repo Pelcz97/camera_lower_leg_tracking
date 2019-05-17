@@ -27,34 +27,19 @@ ros::Publisher pub;
 geometry_msgs::TransformStamped transformStamped;
 
 
-void cloud_cb (const Cloud_cptr& input_cloud)
+void cloud_cb (sensor_msgs::PointCloud2 input_cloud)
 {    
-    
-    
-    // Create the filtering object: downsample the dataset using a leaf size of 1cm
-    ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud->points.size());
-    pcl::VoxelGrid<Point> vg;
-    Cloud_ptr cloud_filtered (new Cloud);
-    vg.setInputCloud (input_cloud);
-    vg.setLeafSize (0.01f, 0.01f, 0.01f);
-    vg.filter (*cloud_filtered);
-    ROS_INFO("PointCloud before filtering has: %lu data points", cloud_filtered->points.size());
-    
-    Cloud input_cloud_tr = *cloud_filtered;
-    sensor_msgs::PointCloud2 sens_msg_input_cloud, sens_msg_input_cloud_tr;
     
     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
     
-    //Conversion from Cloud to sensor_msgs
-    pcl::toROSMsg(*input_cloud, sens_msg_input_cloud);     
-    
+    sensor_msgs::PointCloud2 sens_msg_input_cloud_tr;
     //Transformation
-    tf2::doTransform(sens_msg_input_cloud, sens_msg_input_cloud_tr, transformStamped);
+    tf2::doTransform(input_cloud, sens_msg_input_cloud_tr, transformStamped);
 
+    
+    Cloud input_cloud_tr;
     //Conversion from sensor_msgs::PointCloud2 to Cloud
-    pcl::PCLPointCloud2 pcl_pc2;
-    pcl_conversions::toPCL(sens_msg_input_cloud_tr,pcl_pc2);
-    pcl::fromPCLPointCloud2(pcl_pc2, input_cloud_tr);
+    pcl::fromROSMsg(sens_msg_input_cloud_tr,input_cloud_tr);
     
     
     //Delete the GroundPoints

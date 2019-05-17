@@ -24,9 +24,6 @@ ros::Publisher pub1, pub2;
 
 void cloud_cb (const Cloud_cptr& input_cloud) {
     
-
-
-    
   ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud->points.size());
   // Create the filtering object: downsample the dataset using a leaf size of 1cm
   pcl::VoxelGrid<Point> vg;
@@ -36,8 +33,6 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   vg.filter (*cloud_filtered);
   ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
   
-//     Cloud_cptr cloud_filtered = input_cloud;
-
   if (cloud_filtered->empty()) {
       ROS_INFO("Input is empty");
       return;
@@ -50,9 +45,9 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   //Setting the parameters for cluster extraction
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<Point> ec;
-  ec.setClusterTolerance (0.03); // 5cm
-  ec.setMinClusterSize (100);
-  ec.setMaxClusterSize (2000);
+  ec.setClusterTolerance (0.03); //3cm
+//   ec.setMinClusterSize (100);
+//   ec.setMaxClusterSize (5000);
   ec.setSearchMethod (tree);
   ec.setInputCloud (cloud_filtered);
   ec.extract (cluster_indices);
