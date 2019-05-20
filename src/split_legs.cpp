@@ -1,6 +1,7 @@
 #include "../include/pcl_types.h"
 #include "ros/ros.h" 
 
+#include <pcl/common/centroid.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/extract_indices.h>
@@ -21,6 +22,24 @@
 
 
 ros::Publisher pub1, pub2;
+
+std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
+  std::vector<Cloud> legs;
+  Point fst_centroid, snd_centroid;
+  
+  pcl::computeCentroid (fst_leg, fst_centroid);
+  pcl::computeCentroid (snd_leg, snd_centroid);
+  
+  if (fst_centroid.y > snd_centroid.y) {
+      legs.push_back(fst_leg);
+      legs.push_back(snd_leg);
+  }
+    else {
+      legs.push_back(snd_leg);
+      legs.push_back(fst_leg);
+  }
+  return legs;
+}
 
 void cloud_cb (const Cloud_cptr& input_cloud) {
     
@@ -67,29 +86,28 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
       ROS_INFO("NO CLUSTER FOUND");
   }
   else if (clusters.size() == 1) {
-  Cloud fst_leg = clusters.at(0);
-  
-  ROS_INFO("One Cluster published");
-  pub1.publish(fst_leg);
+  Cloud both_legs = clusters.at(0);
+
   }
   else if (clusters.size() == 2) {
   Cloud fst_leg = clusters.at(0);
   Cloud snd_leg = clusters.at(1);
-  
-  pub1.publish(fst_leg);
-  pub2.publish(snd_leg);
+  std::vector<Cloud> legs = findOrientation(fst_leg, snd_leg);
+
+  pub1.publish(legs[0]);
+  pub2.publish(legs[1]);
   }
   else {
   ROS_INFO("More than 2 Clusters detected. Only the 2 largest will be published.");
   Cloud fst_leg = clusters.at(0);
   Cloud snd_leg = clusters.at(1);
-  
-  pub1.publish(fst_leg);
-  pub2.publish(snd_leg);
+  std::vector<Cloud> legs = findOrientation(fst_leg, snd_leg);
+
+  pub1.publish(legs[0]);
+  pub2.publish(legs[1]);;
   }
 
 }
-
 
 int main (int argc, char** argv)
 {
@@ -101,8 +119,8 @@ int main (int argc, char** argv)
   ros::Subscriber sub = nh.subscribe ("gnd_removed", 1000, cloud_cb);
 
   // Create a ROS publisher for the output point cloud
-  pub1 = nh.advertise<sensor_msgs::PointCloud2> ("fst_leg", 1);
-  pub2 = nh.advertise<sensor_msgs::PointCloud2> ("snd_leg", 1);
+  pub1 = nh.advertise<sensor_msgs::PointCloud2> ("left_leg", 1);
+  pub2 = nh.advertise<sensor_msgs::PointCloud2> ("right_leg", 1);
 
   // Spin
   ros::spin ();

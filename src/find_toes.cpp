@@ -39,7 +39,7 @@ void cloud_cb1 (const Cloud_cptr& input_cloud) {
             maxX.point.z = input_cloud->points[i].z;
         }
     }
-    ROS_INFO("FST_TOE has been published");
+    ROS_INFO("LEFT_TOE has been published");
     pub1.publish(maxX);
 }
 
@@ -61,7 +61,7 @@ void cloud_cb2 (const Cloud_cptr& input_cloud) {
             maxX.point.z = input_cloud->points[i].z;;
         }
     }
-    ROS_INFO("SND_TOE has been published");
+    ROS_INFO("RIGHT_TOE has been published");
     pub2.publish(maxX);
 }
 
@@ -74,13 +74,13 @@ int main (int argc, char** argv)
   ros::NodeHandle nh;
 
   // Create a ROS subscriber for the input point cloud
-  ros::Subscriber sub1 = nh.subscribe ("fst_leg", 1, cloud_cb1);
-  ros::Subscriber sub2 = nh.subscribe ("snd_leg", 1, cloud_cb2);
+  ros::Subscriber sub1 = nh.subscribe ("left_leg", 1, cloud_cb1);
+  ros::Subscriber sub2 = nh.subscribe ("right_leg", 1, cloud_cb2);
 
 
   // Create a ROS publisher for the output point cloud
-  pub1 = nh.advertise<geometry_msgs::PointStamped> ("fst_toe", 1);
-  pub2= nh.advertise<geometry_msgs::PointStamped> ("snd_toe", 1);
+  pub1 = nh.advertise<geometry_msgs::PointStamped> ("left_toe", 1);
+  pub2= nh.advertise<geometry_msgs::PointStamped> ("right_toe", 1);
 
   // Spin
   ros::spin ();
