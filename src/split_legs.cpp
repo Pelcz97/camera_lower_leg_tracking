@@ -46,8 +46,8 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<Point> ec;
   ec.setClusterTolerance (0.03); //3cm
-//   ec.setMinClusterSize (100);
-//   ec.setMaxClusterSize (5000);
+  ec.setMinClusterSize (100);
+  ec.setMaxClusterSize (1000);
   ec.setSearchMethod (tree);
   ec.setInputCloud (cloud_filtered);
   ec.extract (cluster_indices);
