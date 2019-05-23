@@ -79,5 +79,5 @@ int main (int argc, char** argv)
   pub = nh.advertise<sensor_msgs::PointCloud2> ("gnd_removed", 1);
 
   // Spin
-  ros::spin ();
+  ros::spin();
 }

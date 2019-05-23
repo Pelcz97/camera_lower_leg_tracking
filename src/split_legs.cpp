@@ -40,6 +40,29 @@ std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
   }
   return legs;
 }
+std::vector<Cloud> splitCluster(Cloud both_legs) {
+    std::vector<Cloud> legs;
+    Point center;
+    pcl::computeCentroid (both_legs, center);
+    Indices left_inds, right_inds;
+    for( size_t i = 0; i < both_legs.size(); i++ ){
+    	float y = both_legs.points[i].y;
+        if( y > center.y) {
+            left_inds.push_back(i);
+        }
+        else {
+            right_inds.push_back(i);
+        }
+    }
+    
+    Cloud left_leg(both_legs, left_inds);
+    Cloud right_leg(both_legs, right_inds);
+    legs.push_back(left_leg);
+    legs.push_back(right_leg);
+    return legs;
+}
+
+
 
 void cloud_cb (const Cloud_cptr& input_cloud) {
     
@@ -66,7 +89,7 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   pcl::EuclideanClusterExtraction<Point> ec;
   ec.setClusterTolerance (0.03); //3cm
   ec.setMinClusterSize (100);
-  ec.setMaxClusterSize (1000);
+  ec.setMaxClusterSize (1500);
   ec.setSearchMethod (tree);
   ec.setInputCloud (cloud_filtered);
   ec.extract (cluster_indices);
@@ -86,12 +109,14 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
       ROS_INFO("NO CLUSTER FOUND");
   }
   else if (clusters.size() == 1) {
-  Cloud both_legs = clusters.at(0);
-
+    ROS_INFO("ONE CLUSTER");
+     std::vector<Cloud> legs = splitCluster(clusters[0]);
+    pub1.publish(legs[0]);
+    pub2.publish(legs[1]);
   }
   else if (clusters.size() == 2) {
-  Cloud fst_leg = clusters.at(0);
-  Cloud snd_leg = clusters.at(1);
+  Cloud fst_leg = clusters[0];
+  Cloud snd_leg = clusters[1];
   std::vector<Cloud> legs = findOrientation(fst_leg, snd_leg);
 
   pub1.publish(legs[0]);
@@ -99,8 +124,8 @@ void cloud_cb (const Cloud_cptr& input_cloud) {
   }
   else {
   ROS_INFO("More than 2 Clusters detected. Only the 2 largest will be published.");
-  Cloud fst_leg = clusters.at(0);
-  Cloud snd_leg = clusters.at(1);
+  Cloud fst_leg = clusters[0];
+  Cloud snd_leg = clusters[1];
   std::vector<Cloud> legs = findOrientation(fst_leg, snd_leg);
 
   pub1.publish(legs[0]);
@@ -123,5 +148,5 @@ int main (int argc, char** argv)
   pub2 = nh.advertise<sensor_msgs::PointCloud2> ("right_leg", 1);
 
   // Spin
-  ros::spin ();
+  ros::spin();
 }
