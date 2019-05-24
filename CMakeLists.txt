@@ -148,6 +148,9 @@ target_link_libraries(split_legs ${catkin_LIBRARIES})
 add_executable(find_toes src/find_toes.cpp)
 target_link_libraries(find_toes ${catkin_LIBRARIES})
 
+add_executable(feet_detection_node src/feet_detection_node.cpp)
+target_link_libraries(feet_detection_node ${catkin_LIBRARIES})
+
 
 
 ## Rename C++ executable without prefix
