@@ -2,24 +2,19 @@
 #include "../include/pcl_types.h"
 
 #include <sensor_msgs/PointCloud2.h>
-
-#include <pcl/PCLPointCloud2.h>
-#include <pcl/conversions.h>
-
-#include <pcl_ros/transforms.h>
-#include "pcl_ros/point_cloud.h"
-#include <pcl/filters/voxel_grid.h>
-
 #include <geometry_msgs/TransformStamped.h>
-
+#include <geometry_msgs/PointStamped.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-
 #include <tf2/convert.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 
-
+#include <pcl_ros/transforms.h>
+#include "pcl_ros/point_cloud.h"
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/common/centroid.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/point_types.h>
@@ -36,12 +31,15 @@
 #define GND_LEVEL (0.03)
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe;
+geometry_msgs::PointStamped oldLeft,oldRight;
+
+// ros::Publisher pub_inner_side, pub_outer_side;
 
 
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
-    ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
+//     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
 
     sensor_msgs::PointCloud2 sens_msg_input_cloud_tr;
     //Transformation
@@ -64,6 +62,86 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     Cloud output(input_cloud_tr, object_indices );
     return output;
 }
+
+//side can only be left or right!
+ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
+    geometry_msgs::PointStamped oldPoint;
+    if (left) {
+        oldPoint = oldLeft;
+    }
+    else {
+        oldPoint = oldRight;
+    }
+     
+    geometry_msgs::PointStamped maxX;
+    maxX.header.stamp = ros::Time::now();
+    maxX.header.frame_id = "base_link";
+    maxX.header.seq++;
+    maxX.point.x = input_cloud.points[0].x;
+    maxX.point.y = input_cloud.points[0].y;
+    maxX.point.z = input_cloud.points[0].z;
+
+    for( size_t i = 0; i < input_cloud.size(); i++ ){
+    	float X = input_cloud.points[i].x;
+        if( X > maxX.point.x) {
+            maxX.point.x = input_cloud.points[i].x;
+            maxX.point.y = input_cloud.points[i].y;
+            maxX.point.z = input_cloud.points[i].z;
+        }
+    }
+    
+    float distance = sqrt(pow(maxX.point.x - oldPoint.point.x, 2) + pow(maxX.point.y - oldPoint.point.y, 2) + pow(maxX.point.z - maxX.point.z, 2));
+    if (distance > 0.1){
+        ROS_INFO("The distance is: %6.4lf and is too big!", distance);
+    }
+
+    if (left) {
+        oldLeft = maxX;
+    }
+    else {
+        oldRight = maxX;
+    }
+    
+    return maxX;
+}
+
+//  std::vector<geometry_msgs:: PointStamped> findSides(Cloud input_cloud) {
+//      std::vector<geometry_msgs:: PointStamped> sides;
+//      
+//     geometry_msgs::PointStamped maxY, minY;
+//     maxY.header.stamp = ros::Time::now();
+//     maxY.header.frame_id = "base_link";
+//     maxY.header.seq++;
+//     maxY.point.x = input_cloud.points[0].x;
+//     maxY.point.y = input_cloud.points[0].y;
+//     maxY.point.z = input_cloud.points[0].z;
+//     
+//     minY.header.stamp = ros::Time::now();
+//     minY.header.frame_id = "base_link";
+//     minY.header.seq++;
+//     minY.point.x = input_cloud.points[0].x;
+//     minY.point.y = input_cloud.points[0].y;
+//     minY.point.z = input_cloud.points[0].z;
+//     
+//     
+//     for( size_t i = 0; i < input_cloud.size(); i++ ){
+//     	float y= input_cloud.points[i].y;
+//         if( y > maxY.point.y) {
+//             maxY.point.x = input_cloud.points[i].x;
+//             maxY.point.y = input_cloud.points[i].y;
+//             maxY.point.z = input_cloud.points[i].z;
+//         }
+//          if( y < minY.point.y) {
+//             minY.point.x = input_cloud.points[i].x;
+//             minY.point.y = input_cloud.points[i].y;
+//             minY.point.z = input_cloud.points[i].z;
+//         }
+//     }
+//     sides.push_back(maxY);
+//     sides.push_back(minY);
+//     return sides;
+//  }
+
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
     std::vector<Cloud> legs;
@@ -110,20 +188,20 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     //Cloud go wrong. Stated in here "http://docs.pointclouds.org/trunk/classpcl_1_1_point_cloud.html#ab9db5c9a9d98d6256c510d436693ab5f"
     Cloud_ptr input_cloud_ptr = input_cloud.makeShared();
 
-    ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud.points.size());
+//     ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud.points.size());
     // Create the filtering object: downsample the dataset using a leaf size of 1cm
     pcl::VoxelGrid<Point> vg;
     Cloud_ptr cloud_filtered(new Cloud);
     vg.setInputCloud (input_cloud_ptr);
     vg.setLeafSize (0.01f, 0.01f, 0.01f);
     vg.filter (*cloud_filtered);
-    ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
+//     ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
 
     std::vector<Cloud> legs;
 
 
     if (cloud_filtered->empty()) {
-        ROS_INFO("Input is empty");
+//         ROS_INFO("Input is empty");
         return legs;
     }
 
@@ -142,12 +220,12 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     ec.extract (cluster_indices);
 
 
-    int i = 0;
+//     int i = 0;
     std::vector<Cloud> clusters;
     //Creating PointClouds for each cluster. clusters is sorted by the size of the cluster.
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
     {
-        ROS_INFO("Cluster %d has %lu points", i++, cluster_indices.at(i).indices.size());
+//         ROS_INFO("Cluster %d has %lu points", i++, cluster_indices.at(i).indices.size());
         Cloud cloud_cluster(*cloud_filtered, it->indices );
         clusters.push_back(cloud_cluster);
     }
@@ -156,7 +234,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
         ROS_INFO("NO CLUSTER FOUND");
     }
     else if (clusters.size() == 1) {
-        ROS_INFO("ONE CLUSTER");
+//         ROS_INFO("ONE CLUSTER");
         legs = splitCluster(clusters[0]);
     }
     else if (clusters.size() == 2) {
@@ -165,7 +243,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
         legs = findOrientation(fst_leg, snd_leg);
     }
     else {
-        ROS_INFO("More than 2 Clusters detected. Only the 2 largest will be published.");
+//         ROS_INFO("More than 2 Clusters detected. Only the 2 largest will be published.");
         Cloud fst_leg = clusters[0];
         Cloud snd_leg = clusters[1];
         legs = findOrientation(fst_leg, snd_leg);
@@ -174,23 +252,29 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 }
 
 
-void cloud_cb (sensor_msgs::PointCloud2 input_cloud)
-{
+void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     Cloud removedGround = removeGround(input_cloud);
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-//     PointStamped left_toe = findToe(left_leg);
-//     PointStamped right_toe = findToe(right_leg);
+        geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
+        geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
+        
         pub_left_leg.publish(left_leg);
         pub_right_leg.publish(right_leg);
+        pub_left_toe.publish(left_toe);
+        pub_right_toe.publish(right_toe);
+/*        
+        std::vector<geometry_msgs:: PointStamped> sides = findSides(left_leg);
+        pub_inner_side.publish(sides[0]);
+        pub_outer_side.publish(sides[1]);*/
+        
     }
 }
 
 
-int main (int argc, char** argv)
-{
+int main (int argc, char** argv) {
     // Initialize ROS
     ros::init (argc, argv, "feet_detection");
     ros::NodeHandle nh;
@@ -210,8 +294,14 @@ int main (int argc, char** argv)
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2> ("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2> ("right_leg", 1);
+    
+    pub_left_toe = nh.advertise<geometry_msgs::PointStamped> ("left_toe", 1);
+    pub_right_toe = nh.advertise<geometry_msgs::PointStamped> ("right_toe", 1);
 
-
+//     pub_outer_side = nh.advertise<geometry_msgs::PointStamped> ("left_outer_side", 1);
+//     pub_inner_side = nh.advertise<geometry_msgs::PointStamped> ("left_inner_side", 1);
+    
     // Spin
     ros::spin();
+    return 0;
 }
