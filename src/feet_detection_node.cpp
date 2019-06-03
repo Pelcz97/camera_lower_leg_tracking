@@ -115,45 +115,61 @@ Cloud findlowestPoints(Cloud input_cloud) {
     Point lowest;
     Cloud lowestPoints;
     
-    
-    lowest.x = input_cloud.points[0].x;
-    lowest.y = input_cloud.points[0].y;
-    lowest.z = input_cloud.points[0].z;
-    for( size_t i = 0; i < input_cloud.size(); i++ ){
-    	float Z = input_cloud.points[i].z;
-        if( Z < lowest.z) {
-            lowest.x = input_cloud.points[i].x;
-            lowest.y = input_cloud.points[i].y;
-            lowest.z = input_cloud.points[i].z;
+    if (!input_cloud.empty()) {
+        lowest.x = input_cloud.points[0].x;
+        lowest.y = input_cloud.points[0].y;
+        lowest.z = input_cloud.points[0].z;
+        for( size_t i = 0; i < input_cloud.size(); i++ ){
+            float Z = input_cloud.points[i].z;
+            if( Z < lowest.z) {
+                lowest.x = input_cloud.points[i].x;
+                lowest.y = input_cloud.points[i].y;
+                lowest.z = input_cloud.points[i].z;
+            }
         }
-    }
-    for( size_t i = 0; i < input_cloud.size(); i++ ){
-        float Z = input_cloud.points[i].z;
-        if(Z < lowest.z +  POINT_SIZE) {
-            lowestPoints.push_back(input_cloud.points[i]);
+        for( size_t i = 0; i < input_cloud.size(); i++ ){
+            float Z = input_cloud.points[i].z;
+            if(Z < lowest.z +  POINT_SIZE) {
+                lowestPoints.push_back(input_cloud.points[i]);
+            }
         }
     }
     return lowestPoints;
 }
 
 Cloud findSole(Cloud input, int left) {
-    
-    Cloud result;    
-    double maxX;
-    maxX = findToe(input, left).point.x;
-    double minX = maxX - 3 * POINT_SIZE;
-    do {
-        Cloud slice;
-        for (int i = 0; i < input.points.size(); i++) {
-            if (input.points[i].x >= minX && input.points[i].x < maxX) {
-                slice.push_back(input.points[i]);
+    Cloud result,soleWithOutlier; 
+        double maxX;
+        maxX = findToe(input, left).point.x;
+        double minX = maxX - 3 * POINT_SIZE;
+        do {
+            Cloud slice;
+            for (int i = 0; i < input.points.size(); i++) {
+                if (input.points[i].x >= minX && input.points[i].x < maxX) {
+                    slice.push_back(input.points[i]);
+                }
             }
-        }
-        result += findlowestPoints(slice);
-        maxX = minX;
-        minX = maxX - 3 * POINT_SIZE;
-    } while (minX >= MIN_X_CAMERA);
-    
+            soleWithOutlier += findlowestPoints(slice);
+            maxX = minX;
+            minX = maxX - 3 * POINT_SIZE;
+        } while (minX >= MIN_X_CAMERA);
+                
+    // Creating the KdTree object for the search method of the extraction
+    pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
+    tree->setInputCloud(soleWithOutlier.makeShared());
+
+    //Setting the parameters for cluster extraction
+    std::vector<pcl::PointIndices> cluster_indices;
+    pcl::EuclideanClusterExtraction<Point> ec;
+    ec.setClusterTolerance (0.02);
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (soleWithOutlier.makeShared());
+    ec.extract (cluster_indices);
+
+    if(!cluster_indices.empty()) {
+        Cloud temp(soleWithOutlier, cluster_indices[0].indices);
+        result = temp;   
+    }
     result.header.frame_id = "base_link";
     return result;
 }
@@ -227,11 +243,11 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     //Setting the parameters for cluster extraction
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<Point> ec;
-    ec.setClusterTolerance (CLUSTER_TOLERANCE);
-    ec.setMaxClusterSize (MAX_CLUSTER_SIZE);
-    ec.setSearchMethod (tree);
-    ec.setInputCloud (cloud_filtered);
-    ec.extract (cluster_indices);
+    ec.setClusterTolerance(CLUSTER_TOLERANCE);
+    ec.setMaxClusterSize(MAX_CLUSTER_SIZE);
+    ec.setSearchMethod(tree);
+    ec.setInputCloud(cloud_filtered);
+    ec.extract(cluster_indices);
 
 
 //     int i = 0;
@@ -271,21 +287,21 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
-        Cloud right_leg = legs[1];
+        Cloud right_leg = legs[1];                
+        pub_left_leg.publish(left_leg);
+        pub_right_leg.publish(right_leg);
+
+        
         geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
         geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
+        pub_left_toe.publish(left_toe);
+        pub_right_toe.publish(right_toe);
         
         Cloud leftSole = findSole(left_leg, true);
         Cloud rightSole = findSole(right_leg, false);
-        
-        ROS_INFO("The LeftSole has %lu points and the RightSole has %lu points", leftSole.points.size(), rightSole.points.size());
-        
-        pub_left_leg.publish(left_leg);
-        pub_right_leg.publish(right_leg);
-        pub_left_toe.publish(left_toe);
-        pub_right_toe.publish(right_toe);
         pub_left_sole.publish(leftSole);
         pub_right_sole.publish(rightSole);
+
     }
 }
 
@@ -307,14 +323,14 @@ int main (int argc, char** argv) {
     // Create a ROS subscriber for the input point cloud
     ros::Subscriber sub = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
 
-    pub_left_leg = nh.advertise<sensor_msgs::PointCloud2> ("left_leg", 1);
-    pub_right_leg = nh.advertise<sensor_msgs::PointCloud2> ("right_leg", 1);
+    pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
+    pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
     
-    pub_left_toe = nh.advertise<geometry_msgs::PointStamped> ("left_toe", 1);
-    pub_right_toe = nh.advertise<geometry_msgs::PointStamped> ("right_toe", 1);
+    pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
+    pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
     
-    pub_left_sole = nh.advertise<sensor_msgs::PointCloud2> ("left_sole", 1);
-    pub_right_sole = nh.advertise<sensor_msgs::PointCloud2> ("right_sole", 1);
+    pub_left_sole = nh.advertise<sensor_msgs::PointCloud2>("left_sole", 1);
+    pub_right_sole = nh.advertise<sensor_msgs::PointCloud2>("right_sole", 1);
     
     // Spin
     ros::spin();
