@@ -1,33 +1,6 @@
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
-#include <sensor_msgs/PointCloud2.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <geometry_msgs/PointStamped.h>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/buffer.h>
-#include <tf2/convert.h>
-#include <tf2/transform_datatypes.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
-
-#include <pcl_ros/transforms.h>
-#include "pcl_ros/point_cloud.h"
-#include <pcl/PCLPointCloud2.h>
-#include <pcl/conversions.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/common/centroid.h>
-#include <pcl/ModelCoefficients.h>
-#include <pcl/point_types.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/kdtree/kdtree.h>
-#include <pcl/sample_consensus/method_types.h>
-#include <pcl/sample_consensus/model_types.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/segmentation/extract_clusters.h>
-
-
 #define GND_LEVEL (0.03)
 #define MIN_X_CAMERA (-0.8)
 #define POINT_SIZE (0.01)
@@ -170,6 +143,7 @@ Cloud findSole(Cloud input, int left) {
         Cloud temp(soleWithOutlier, cluster_indices[0].indices);
         result = temp;   
     }
+        
     result.header.frame_id = "base_link";
     return result;
 }
@@ -192,24 +166,27 @@ std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
     return legs;
 }
 std::vector<Cloud> splitCluster(Cloud both_legs) {
+//     ROS_INFO("CLUSTER HAS %lu POINTS", both_legs.points.size());
     std::vector<Cloud> legs;
-    Point center;
-    pcl::computeCentroid (both_legs, center);
-    Indices left_inds, right_inds;
-    for( size_t i = 0; i < both_legs.size(); i++ ) {
-        float y = both_legs.points[i].y;
-        if( y > center.y) {
-            left_inds.push_back(i);
+    if (both_legs.points.size() > 1000) {
+        Point center;
+        pcl::computeCentroid (both_legs, center);
+        Indices left_inds, right_inds;
+        for( size_t i = 0; i < both_legs.size(); i++ ) {
+            float y = both_legs.points[i].y;
+            if( y > center.y) {
+                left_inds.push_back(i);
+            }
+            else {
+                right_inds.push_back(i);
+            }
         }
-        else {
-            right_inds.push_back(i);
-        }
+    
+        Cloud left_leg(both_legs, left_inds);
+        Cloud right_leg(both_legs, right_inds);
+        legs.push_back(left_leg);
+        legs.push_back(right_leg);
     }
-
-    Cloud left_leg(both_legs, left_inds);
-    Cloud right_leg(both_legs, right_inds);
-    legs.push_back(left_leg);
-    legs.push_back(right_leg);
     return legs;
 }
 
@@ -265,7 +242,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     }
     else if (clusters.size() == 1) {
 //         ROS_INFO("ONE CLUSTER");
-//         legs = splitCluster(clusters[0]);
+        legs = splitCluster(clusters[0]);
     }
     else if (clusters.size() == 2) {
         Cloud fst_leg = clusters[0];

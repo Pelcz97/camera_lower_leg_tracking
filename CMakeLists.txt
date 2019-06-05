@@ -139,14 +139,14 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(remove_gnd src/remove_gnd.cpp)
-target_link_libraries(remove_gnd ${catkin_LIBRARIES})
-
-add_executable(split_legs src/split_legs.cpp)
-target_link_libraries(split_legs ${catkin_LIBRARIES})
-
-add_executable(find_toes src/find_toes.cpp)
-target_link_libraries(find_toes ${catkin_LIBRARIES})
+# add_executable(remove_gnd src/remove_gnd.cpp)
+# target_link_libraries(remove_gnd ${catkin_LIBRARIES})
+# 
+# add_executable(split_legs src/split_legs.cpp)
+# target_link_libraries(split_legs ${catkin_LIBRARIES})
+# 
+# add_executable(find_toes src/find_toes.cpp)
+# target_link_libraries(find_toes ${catkin_LIBRARIES})
 
 add_executable(feet_detection_node src/feet_detection_node.cpp)
 target_link_libraries(feet_detection_node ${catkin_LIBRARIES})

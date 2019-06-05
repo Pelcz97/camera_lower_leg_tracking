@@ -5,6 +5,33 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include <sensor_msgs/PointCloud2.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <geometry_msgs/PointStamped.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2/convert.h>
+#include <tf2/transform_datatypes.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+
+#include <pcl_ros/transforms.h>
+#include "pcl_ros/point_cloud.h"
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/common/centroid.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/point_types.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+
+
 typedef pcl::PointXYZRGB Point;
 
 typedef pcl::PointCloud<Point> Cloud;
