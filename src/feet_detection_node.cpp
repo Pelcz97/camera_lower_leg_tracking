@@ -1,7 +1,7 @@
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
-#define GND_LEVEL (0.03)
+#define GND_LEVEL (0.02)
 #define MIN_X_CAMERA (-0.8)
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
@@ -11,10 +11,6 @@
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole;
 geometry_msgs::PointStamped oldLeft,oldRight;
-
-// ros::Publisher pub_inner_side, pub_outer_side;
-
-
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -112,8 +108,7 @@ Cloud findlowestPoints(Cloud input_cloud) {
 
 Cloud findSole(Cloud input, int left) {
     Cloud result,soleWithOutlier; 
-        double maxX;
-        maxX = findToe(input, left).point.x;
+        double maxX = findToe(input, left).point.x;
         double minX = maxX - 3 * POINT_SIZE;
         do {
             Cloud slice;
@@ -124,7 +119,7 @@ Cloud findSole(Cloud input, int left) {
             }
             soleWithOutlier += findlowestPoints(slice);
             maxX = minX;
-            minX = maxX - 3 * POINT_SIZE;
+            minX = maxX -  3 * POINT_SIZE;
         } while (minX >= MIN_X_CAMERA);
                 
     // Creating the KdTree object for the search method of the extraction
@@ -222,6 +217,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     pcl::EuclideanClusterExtraction<Point> ec;
     ec.setClusterTolerance(CLUSTER_TOLERANCE);
     ec.setMaxClusterSize(MAX_CLUSTER_SIZE);
+    ec.setMinClusterSize(MIN_CLUSTER_SIZE);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered);
     ec.extract(cluster_indices);
