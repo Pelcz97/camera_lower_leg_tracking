@@ -1,6 +1,8 @@
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
+#include <Eigen/Geometry> 
+
 #define GND_LEVEL (0.02)
 #define MIN_X_CAMERA (-0.8)
 #define POINT_SIZE (0.01)
@@ -9,8 +11,9 @@
 #define MAX_CLUSTER_SIZE (1000)
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane, pub_leftSolePlaneCloud, pub_rightSolePlaneCloud;
 geometry_msgs::PointStamped oldLeft,oldRight;
+Cloud leftSolePlane, rightSolePlane;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -148,6 +151,7 @@ Cloud findSole(Cloud input, int left) {
     return result;
 }
 
+//returnes the plane as coefficients in the hessian normal form
 pcl::ModelCoefficients findSolePlane(Cloud sole) {
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
 
@@ -160,7 +164,7 @@ pcl::ModelCoefficients findSolePlane(Cloud sole) {
         // Mandatory
         seg.setModelType (pcl::SACMODEL_PLANE);
         seg.setMethodType (pcl::SAC_RANSAC);
-        seg.setDistanceThreshold (0.01);
+        seg.setDistanceThreshold (0.002);
 
         seg.setInputCloud (sole.makeShared());
         seg.segment (*inliers, *coefficients);
@@ -280,6 +284,26 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
+void publishSoleMarker(pcl::ModelCoefficients plane, Cloud sole, int left) {
+    geometry_msgs::PoseStamped result;
+    result.header.seq++;
+    result.header.frame_id = "base_link";
+    result.header.stamp= ros::Time::now();
+    result.pose.position = findToe(sole, left).point;
+
+    Eigen::Quaterniond quaternion;
+    Eigen::Vector3d up(0.0,0.0,1.0);
+    Eigen::Vector3d planeNormal(plane.values[1], plane.values[2], plane.values[3]);
+    quaternion.setFromTwoVectors(up, planeNormal);
+    
+    result.pose.orientation.x = quaternion.x();
+    result.pose.orientation.y = quaternion.y();
+    result.pose.orientation.z = quaternion.z();
+    result.pose.orientation.w = quaternion.w();
+        
+    if (left) pub_LeftSolePlane.publish(result);
+    else pub_RightSolePlane.publish(result);
+}
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     Cloud removedGround = removeGround(input_cloud);
@@ -305,11 +329,13 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         pcl::ModelCoefficients rightSolePlane = findSolePlane(rightSole);
         
         if (!leftSolePlane.values.empty()) {
-            ROS_INFO("ModelCoefficients for the LeftSole are: %f %f %f %f", leftSolePlane.values[1],leftSolePlane.values[2],leftSolePlane.values[3],leftSolePlane.values[4]);
+//             ROS_INFO("ModelCoefficients for the LeftSole are: %f %f %f %f", leftSolePlane.values[1],leftSolePlane.values[2],leftSolePlane.values[3],leftSolePlane.values[4]);
+            publishSoleMarker(leftSolePlane, left_leg, true);
         }
         
         if (!rightSolePlane.values.empty()) {
-            ROS_INFO("ModelCoefficients for the RightSole are: %f %f %f %f", rightSolePlane.values[1],rightSolePlane.values[2],rightSolePlane.values[3],rightSolePlane.values[4]);
+//             ROS_INFO("ModelCoefficients for the RightSole are: %f %f %f %f", rightSolePlane.values[1],rightSolePlane.values[2],rightSolePlane.values[3],rightSolePlane.values[4]);
+            publishSoleMarker(rightSolePlane, right_leg, false);
         }
     }
 }
@@ -340,6 +366,9 @@ int main (int argc, char** argv) {
     
     pub_left_sole = nh.advertise<sensor_msgs::PointCloud2>("left_sole", 1);
     pub_right_sole = nh.advertise<sensor_msgs::PointCloud2>("right_sole", 1);
+    
+    pub_LeftSolePlane = nh.advertise<geometry_msgs::PoseStamped>("left_sole_plane",1);
+    pub_RightSolePlane = nh.advertise<geometry_msgs::PoseStamped>("right_sole_plane",1);
     
     // Spin
     ros::spin();

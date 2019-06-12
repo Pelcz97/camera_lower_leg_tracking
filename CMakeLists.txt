@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS roscpp
     tf2_msgs
     tf2_sensor_msgs)
 find_package(PCL 1.7 REQUIRED)
+find_package(Eigen3)
 include_directories(${catkin_INCLUDE_DIRS})
 
 ## System dependencies are found with CMake's conventions
