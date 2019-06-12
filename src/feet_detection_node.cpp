@@ -11,7 +11,7 @@
 #define MAX_CLUSTER_SIZE (1000)
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane, pub_leftSolePlaneCloud, pub_rightSolePlaneCloud;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
 geometry_msgs::PointStamped oldLeft,oldRight;
 Cloud leftSolePlane, rightSolePlane;
 
@@ -164,13 +164,34 @@ pcl::ModelCoefficients findSolePlane(Cloud sole) {
         // Mandatory
         seg.setModelType (pcl::SACMODEL_PLANE);
         seg.setMethodType (pcl::SAC_RANSAC);
-        seg.setDistanceThreshold (0.002);
+        seg.setDistanceThreshold (POINT_SIZE);
 
         seg.setInputCloud (sole.makeShared());
         seg.segment (*inliers, *coefficients);
     }
     return *coefficients;
 
+}
+
+void publishSoleMarker(pcl::ModelCoefficients plane, Cloud sole, int left) {
+    geometry_msgs::PoseStamped result;
+    result.header.seq++;
+    result.header.frame_id = "base_link";
+    result.header.stamp= ros::Time::now();
+    result.pose.position = findToe(sole, left).point;
+
+    Eigen::Quaterniond quaternion;
+    Eigen::Vector3d coordinate_system(0.0,0.0,1.0);
+    Eigen::Vector3d planeNormal(plane.values[1], plane.values[2], plane.values[3]);
+    quaternion.setFromTwoVectors(coordinate_system, planeNormal);
+    
+    result.pose.orientation.x = quaternion.x();
+    result.pose.orientation.y = quaternion.y();
+    result.pose.orientation.z = quaternion.z();
+    result.pose.orientation.w = quaternion.w();
+        
+    if (left) pub_LeftSolePlane.publish(result);
+    else pub_RightSolePlane.publish(result);
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -284,27 +305,6 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
-void publishSoleMarker(pcl::ModelCoefficients plane, Cloud sole, int left) {
-    geometry_msgs::PoseStamped result;
-    result.header.seq++;
-    result.header.frame_id = "base_link";
-    result.header.stamp= ros::Time::now();
-    result.pose.position = findToe(sole, left).point;
-
-    Eigen::Quaterniond quaternion;
-    Eigen::Vector3d up(0.0,0.0,1.0);
-    Eigen::Vector3d planeNormal(plane.values[1], plane.values[2], plane.values[3]);
-    quaternion.setFromTwoVectors(up, planeNormal);
-    
-    result.pose.orientation.x = quaternion.x();
-    result.pose.orientation.y = quaternion.y();
-    result.pose.orientation.z = quaternion.z();
-    result.pose.orientation.w = quaternion.w();
-        
-    if (left) pub_LeftSolePlane.publish(result);
-    else pub_RightSolePlane.publish(result);
-}
-
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     Cloud removedGround = removeGround(input_cloud);
     std::vector<Cloud> legs = splitLegs(removedGround);
@@ -369,7 +369,7 @@ int main (int argc, char** argv) {
     
     pub_LeftSolePlane = nh.advertise<geometry_msgs::PoseStamped>("left_sole_plane",1);
     pub_RightSolePlane = nh.advertise<geometry_msgs::PoseStamped>("right_sole_plane",1);
-    
+        
     // Spin
     ros::spin();
     return 0;
