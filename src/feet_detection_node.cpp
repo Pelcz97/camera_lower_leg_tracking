@@ -66,7 +66,7 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     
     float distance = sqrt(pow(maxX.point.x - oldPoint.point.x, 2) + pow(maxX.point.y - oldPoint.point.y, 2) + pow(maxX.point.z - maxX.point.z, 2));
     if (distance > 0.1){
-        ROS_INFO("The distance is: %6.4lf and it's too big!", distance);
+//         ROS_INFO("The distance is: %6.4lf and it's too big!", distance);
     }
 
     if (left) {
@@ -106,20 +106,25 @@ Cloud findlowestPoints(Cloud input_cloud) {
     return lowestPoints;
 }
 
+//side can only be left or right!
 Cloud findSole(Cloud input, int left) {
     Cloud result,soleWithOutlier; 
-        double maxX = findToe(input, left).point.x;
-        double minX = maxX - 3 * POINT_SIZE;
+        geometry_msgs::Point toe = findToe(input, left).point;
+        double maxX = toe.x;
+        double minX = maxX -  POINT_SIZE;
+        double midY = toe.y;
         do {
-            Cloud slice;
+            Cloud sliceLeft, sliceRight;
             for (int i = 0; i < input.points.size(); i++) {
                 if (input.points[i].x >= minX && input.points[i].x < maxX) {
-                    slice.push_back(input.points[i]);
+                    if (input.points[i].y >= midY) sliceLeft.push_back(input.points[i]);
+                    else sliceLeft.push_back(input.points[i]);
                 }
             }
-            soleWithOutlier += findlowestPoints(slice);
+            soleWithOutlier += findlowestPoints(sliceLeft);
+            soleWithOutlier += findlowestPoints(sliceRight);
             maxX = minX;
-            minX = maxX -  3 * POINT_SIZE;
+            minX = maxX -  POINT_SIZE;
         } while (minX >= MIN_X_CAMERA);
                 
     // Creating the KdTree object for the search method of the extraction
@@ -141,6 +146,27 @@ Cloud findSole(Cloud input, int left) {
         
     result.header.frame_id = "base_link";
     return result;
+}
+
+pcl::ModelCoefficients findSolePlane(Cloud sole) {
+    pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+
+    if (!sole.points.empty()) {
+        pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+        // Create the segmentation object
+        pcl::SACSegmentation<Point> seg;
+        // Optional
+        seg.setOptimizeCoefficients (true);
+        // Mandatory
+        seg.setModelType (pcl::SACMODEL_PLANE);
+        seg.setMethodType (pcl::SAC_RANSAC);
+        seg.setDistanceThreshold (0.01);
+
+        seg.setInputCloud (sole.makeShared());
+        seg.segment (*inliers, *coefficients);
+    }
+    return *coefficients;
+
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -274,7 +300,17 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         Cloud rightSole = findSole(right_leg, false);
         pub_left_sole.publish(leftSole);
         pub_right_sole.publish(rightSole);
-
+        
+        pcl::ModelCoefficients leftSolePlane = findSolePlane(leftSole);
+        pcl::ModelCoefficients rightSolePlane = findSolePlane(rightSole);
+        
+        if (!leftSolePlane.values.empty()) {
+            ROS_INFO("ModelCoefficients for the LeftSole are: %f %f %f %f", leftSolePlane.values[1],leftSolePlane.values[2],leftSolePlane.values[3],leftSolePlane.values[4]);
+        }
+        
+        if (!rightSolePlane.values.empty()) {
+            ROS_INFO("ModelCoefficients for the RightSole are: %f %f %f %f", rightSolePlane.values[1],rightSolePlane.values[2],rightSolePlane.values[3],rightSolePlane.values[4]);
+        }
     }
 }
 
