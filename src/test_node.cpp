@@ -1,3 +1,4 @@
+ 
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
@@ -10,10 +11,14 @@
 #define MIN_CLUSTER_SIZE (100)
 #define MAX_CLUSTER_SIZE (1000)
 
+#define CLOUD_COUNT (475)
+
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
 geometry_msgs::PointStamped oldLeft,oldRight;
 Cloud leftSolePlane, rightSolePlane;
+
+int FrameCount;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -129,7 +134,7 @@ Cloud findSole(Cloud input, int left) {
             maxX = minX;
             minX = maxX -  POINT_SIZE;
         } while (minX >= MIN_X_CAMERA);
-                
+                /*
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
     tree->setInputCloud(soleWithOutlier.makeShared());
@@ -146,8 +151,15 @@ Cloud findSole(Cloud input, int left) {
         Cloud temp(soleWithOutlier, cluster_indices[0].indices);
         result = temp;   
     }
-        
+        */
+    result = soleWithOutlier;
     result.header.frame_id = "base_link";
+    for (int i = 0; i < result.size(); i++) {
+      result.points[i].r = 255;
+      result.points[i].g = 0;
+      result.points[i].b = 0;
+    }
+    
     return result;
 }
 
@@ -312,6 +324,8 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
+    FrameCount++;
+    if (FrameCount <= CLOUD_COUNT) { 
     Cloud removedGround = removeGround(input_cloud);
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (!legs.empty()) {
@@ -344,6 +358,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             publishSoleMarker(rightSolePlane, right_leg, false);
         }
     }
+    }
 }
 
 int main (int argc, char** argv) {
@@ -354,6 +369,7 @@ int main (int argc, char** argv) {
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 
+    FrameCount = 0;
 
     try {
         transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));

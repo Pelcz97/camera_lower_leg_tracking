@@ -12,12 +12,12 @@ find_package(catkin REQUIRED COMPONENTS roscpp
     sensor_msgs
     genmsg
     geometry_msgs
+    visualization_msgs
     tf2
     tf2_ros
     tf2_msgs
     tf2_sensor_msgs)
 find_package(PCL 1.7 REQUIRED)
-find_package(Eigen3)
 include_directories(${catkin_INCLUDE_DIRS})
 
 ## System dependencies are found with CMake's conventions
@@ -140,19 +140,12 @@ catkin_package(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(remove_gnd src/remove_gnd.cpp)
-# target_link_libraries(remove_gnd ${catkin_LIBRARIES})
-# 
-# add_executable(split_legs src/split_legs.cpp)
-# target_link_libraries(split_legs ${catkin_LIBRARIES})
-# 
-# add_executable(find_toes src/find_toes.cpp)
-# target_link_libraries(find_toes ${catkin_LIBRARIES})
 
 add_executable(feet_detection_node src/feet_detection_node.cpp)
 target_link_libraries(feet_detection_node ${catkin_LIBRARIES})
 
-
+add_executable(test_node src/test_node.cpp)
+target_link_libraries(test_node ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
