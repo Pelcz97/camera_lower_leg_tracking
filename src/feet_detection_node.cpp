@@ -9,9 +9,6 @@
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
 #define MIN_CLUSTER_SIZE (100)
-#define MAX_CLUSTER_SIZE (1000)
-
-#define CLOUD_COUNT (475)
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
@@ -45,29 +42,31 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 
 //side can only be left or right!
  geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
+
+    geometry_msgs::PointStamped maxX;
+    maxX.header.stamp = ros::Time::now();
+    maxX.header.frame_id = "base_link";
+    maxX.header.seq++;
+    if (!input_cloud.empty()) {
+        maxX.point.x = input_cloud.points[0].x;
+        maxX.point.y = input_cloud.points[0].y;
+        maxX.point.z = input_cloud.points[0].z;
+
+        for( size_t i = 0; i < input_cloud.size(); i++ ){
+            float X = input_cloud.points[i].x;
+            if( X > maxX.point.x) {
+                maxX.point.x = input_cloud.points[i].x;
+                maxX.point.y = input_cloud.points[i].y;
+                maxX.point.z = input_cloud.points[i].z;
+            }
+        }
+    }
     geometry_msgs::PointStamped oldPoint;
     if (left) {
         oldPoint = oldLeft;
     }
     else {
         oldPoint = oldRight;
-    }
-     
-    geometry_msgs::PointStamped maxX;
-    maxX.header.stamp = ros::Time::now();
-    maxX.header.frame_id = "base_link";
-    maxX.header.seq++;
-    maxX.point.x = input_cloud.points[0].x;
-    maxX.point.y = input_cloud.points[0].y;
-    maxX.point.z = input_cloud.points[0].z;
-
-    for( size_t i = 0; i < input_cloud.size(); i++ ){
-    	float X = input_cloud.points[i].x;
-        if( X > maxX.point.x) {
-            maxX.point.x = input_cloud.points[i].x;
-            maxX.point.y = input_cloud.points[i].y;
-            maxX.point.z = input_cloud.points[i].z;
-        }
     }
     
     float distance = sqrt(pow(maxX.point.x - oldPoint.point.x, 2) + pow(maxX.point.y - oldPoint.point.y, 2) + pow(maxX.point.z - maxX.point.z, 2));
@@ -115,9 +114,10 @@ Cloud findlowestPoints(Cloud input_cloud) {
 //side can only be left or right!
 Cloud findSole(Cloud input, int left) {
     Cloud result,soleWithOutlier; 
+    if (!input.empty()) {
         geometry_msgs::Point toe = findToe(input, left).point;
         double maxX = toe.x;
-        double minX = maxX -  3 * POINT_SIZE;
+        double minX = maxX - POINT_SIZE;
         double midY = toe.y;
         do {
             Cloud sliceLeft, sliceRight;
@@ -130,25 +130,25 @@ Cloud findSole(Cloud input, int left) {
             soleWithOutlier += findlowestPoints(sliceLeft);
             soleWithOutlier += findlowestPoints(sliceRight);
             maxX = minX;
-            minX = maxX -  3 * POINT_SIZE;
+            minX = maxX - POINT_SIZE;
         } while (minX >= MIN_X_CAMERA);
                 
-    // Creating the KdTree object for the search method of the extraction
-    pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
-    tree->setInputCloud(soleWithOutlier.makeShared());
+        // Creating the KdTree object for the search method of the extraction
+        pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
+        tree->setInputCloud(soleWithOutlier.makeShared());
 
-//  Setting the parameters for cluster extraction
-    std::vector<pcl::PointIndices> cluster_indices;
-    pcl::EuclideanClusterExtraction<Point> ec;
-    ec.setClusterTolerance (0.02);
-    ec.setSearchMethod (tree);
-    ec.setInputCloud (soleWithOutlier.makeShared());
-    ec.extract (cluster_indices);
+        //  Setting the parameters for cluster extraction
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<Point> ec;
+        ec.setClusterTolerance (0.02);
+        ec.setSearchMethod (tree);
+        ec.setInputCloud (soleWithOutlier.makeShared());
+        ec.extract (cluster_indices);
 
-    if(!cluster_indices.empty()) {
-        result = Cloud(soleWithOutlier, cluster_indices[0].indices);   
+        if(!cluster_indices.empty()) {
+            result = Cloud(soleWithOutlier, cluster_indices[0].indices);   
+        }
     }
-    
     result.header.frame_id = "base_link";    
     return result;
 }
@@ -157,7 +157,7 @@ Cloud findSole(Cloud input, int left) {
 pcl::ModelCoefficients findAndPublishSolePlane(Cloud sole, int left) {
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
 
-    if (!sole.points.empty()) {
+    if (!sole.empty()) {
         pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
         // Create the segmentation object
         pcl::SACSegmentation<Point> seg;
@@ -181,29 +181,31 @@ pcl::ModelCoefficients findAndPublishSolePlane(Cloud sole, int left) {
 }
 
 void publishSoleMarker(pcl::ModelCoefficients plane, Cloud sole, int left) {
-    visualization_msgs::Marker marker;
-    marker.header.frame_id = "base_link";
-    marker.header.stamp = ros::Time();
-    marker.id = 0;
-    marker.type = visualization_msgs::Marker::ARROW;
-    marker.action = visualization_msgs::Marker::ADD;
-    geometry_msgs::Point toe = findToe(sole, left).point;
-    marker.points.push_back(toe);
-    geometry_msgs::Point planeNormal;
-    planeNormal.x = toe.x + plane.values[0];
-    planeNormal.y = toe.y + plane.values[1];
-    planeNormal.z = toe.z + plane.values[2];
-    marker.points.push_back(planeNormal);
-    marker.scale.x = 0.05;
-    marker.scale.y = 0.07;
-    marker.scale.z = 0.05;
-    marker.color.a = 1.0; // Don't forget to set the alpha!
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
+    if (!plane.values.empty()) {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = "base_link";
+        marker.header.stamp = ros::Time();
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::ARROW;
+        marker.action = visualization_msgs::Marker::ADD;
+        geometry_msgs::Point toe = findToe(sole, left).point;
+        marker.points.push_back(toe);
+        geometry_msgs::Point planeNormal;
+        planeNormal.x = toe.x + plane.values[0];
+        planeNormal.y = toe.y + plane.values[1];
+        planeNormal.z = toe.z + plane.values[2];
+        marker.points.push_back(planeNormal);
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.07;
+        marker.scale.z = 0.05;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
         
-    if (left) pub_LeftSolePlane.publish(marker);
-    else pub_RightSolePlane.publish(marker);
+        if (left) pub_LeftSolePlane.publish(marker);
+        else pub_RightSolePlane.publish(marker);
+    }
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -227,9 +229,10 @@ std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
 std::vector<Cloud> splitCluster(Cloud both_legs) {
 //     ROS_INFO("CLUSTER HAS %lu POINTS", both_legs.points.size());
     std::vector<Cloud> legs;
+    Point center;
+    pcl::computeCentroid (both_legs, center);
+    Cloud left_leg, right_leg;
     if (both_legs.points.size() > 1000) {
-        Point center;
-        pcl::computeCentroid (both_legs, center);
         Indices left_inds, right_inds;
         for( size_t i = 0; i < both_legs.size(); i++ ) {
             float y = both_legs.points[i].y;
@@ -241,18 +244,31 @@ std::vector<Cloud> splitCluster(Cloud both_legs) {
             }
         }
     
-        Cloud left_leg(both_legs, left_inds);
-        Cloud right_leg(both_legs, right_inds);
+        left_leg = Cloud(both_legs, left_inds);
+        right_leg= Cloud(both_legs, right_inds);
         legs.push_back(left_leg);
         legs.push_back(right_leg);
+        return legs;
+    }
+    if (center.y >= 0) {
+        ROS_INFO("ONLY LEFT LEG IN FRAME");
+        legs.push_back(both_legs);
+        legs.push_back(right_leg);
+    }
+    else {
+        ROS_INFO("ONLY RIGHT LEG IN FRAME");
+        legs.push_back(left_leg);
+        legs.push_back(both_legs);
     }
     return legs;
 }
 
-
+//With splitLegs a vector will be filled where the first entry is left and and the second is right.
+//If there is no Cluster then legs will stay empty.
+//If both legs are one cluster it will get split in the middle
+//If only one leg is in the frame its Cloud will be as expected. The other Cloud will be empty.
 std::vector<Cloud> splitLegs(Cloud input_cloud) {
 
-    //Cloud go wrong. Stated in here "http://docs.pointclouds.org/trunk/classpcl_1_1_point_cloud.html#ab9db5c9a9d98d6256c510d436693ab5f"
     Cloud_ptr input_cloud_ptr = input_cloud.makeShared();
 
 //     ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud.points.size());
@@ -280,7 +296,6 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<Point> ec;
     ec.setClusterTolerance(CLUSTER_TOLERANCE);
-    ec.setMaxClusterSize(MAX_CLUSTER_SIZE);
     ec.setMinClusterSize(MIN_CLUSTER_SIZE);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered);
@@ -324,11 +339,10 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
-        Cloud right_leg = legs[1];                
-        pub_left_leg.publish(left_leg);
-        pub_right_leg.publish(right_leg);
+        Cloud right_leg = legs[1];
+        if (!left_leg.empty()) pub_left_leg.publish(left_leg);
+        if (!right_leg.empty()) pub_right_leg.publish(right_leg);
 
-        
         geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
         geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
         pub_left_toe.publish(left_toe);
