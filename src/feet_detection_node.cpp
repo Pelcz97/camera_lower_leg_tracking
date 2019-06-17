@@ -1,14 +1,17 @@
+ 
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
 #include<visualization_msgs/Marker.h>
 
 #define GND_LEVEL (0.02)
-#define MIN_X_CAMERA (-0.8)
+#define MIN_X_CAMERA (-0.94)
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
 #define MIN_CLUSTER_SIZE (100)
 #define MAX_CLUSTER_SIZE (1000)
+
+#define CLOUD_COUNT (475)
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
@@ -101,7 +104,7 @@ Cloud findlowestPoints(Cloud input_cloud) {
         }
         for( size_t i = 0; i < input_cloud.size(); i++ ){
             float Z = input_cloud.points[i].z;
-            if(Z < lowest.z +  POINT_SIZE) {
+            if(Z < lowest.z + POINT_SIZE) {
                 lowestPoints.push_back(input_cloud.points[i]);
             }
         }
@@ -114,7 +117,7 @@ Cloud findSole(Cloud input, int left) {
     Cloud result,soleWithOutlier; 
         geometry_msgs::Point toe = findToe(input, left).point;
         double maxX = toe.x;
-        double minX = maxX -  POINT_SIZE;
+        double minX = maxX -  3 * POINT_SIZE;
         double midY = toe.y;
         do {
             Cloud sliceLeft, sliceRight;
@@ -127,14 +130,14 @@ Cloud findSole(Cloud input, int left) {
             soleWithOutlier += findlowestPoints(sliceLeft);
             soleWithOutlier += findlowestPoints(sliceRight);
             maxX = minX;
-            minX = maxX -  POINT_SIZE;
+            minX = maxX -  3 * POINT_SIZE;
         } while (minX >= MIN_X_CAMERA);
                 
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
     tree->setInputCloud(soleWithOutlier.makeShared());
 
-    //Setting the parameters for cluster extraction
+//  Setting the parameters for cluster extraction
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<Point> ec;
     ec.setClusterTolerance (0.02);
@@ -143,16 +146,15 @@ Cloud findSole(Cloud input, int left) {
     ec.extract (cluster_indices);
 
     if(!cluster_indices.empty()) {
-        Cloud temp(soleWithOutlier, cluster_indices[0].indices);
-        result = temp;   
+        result = Cloud(soleWithOutlier, cluster_indices[0].indices);   
     }
-        
-    result.header.frame_id = "base_link";
+    
+    result.header.frame_id = "base_link";    
     return result;
 }
 
 //returnes the plane as coefficients in the hessian normal form
-pcl::ModelCoefficients findSolePlane(Cloud sole) {
+pcl::ModelCoefficients findAndPublishSolePlane(Cloud sole, int left) {
     pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
 
     if (!sole.points.empty()) {
@@ -169,6 +171,10 @@ pcl::ModelCoefficients findSolePlane(Cloud sole) {
 
         seg.setInputCloud (sole.makeShared());
         seg.segment (*inliers, *coefficients);
+        
+        Cloud solePlane(sole, inliers->indices);
+        if (left) pub_left_sole.publish(solePlane);
+        else pub_right_sole.publish(solePlane);
     }
     return *coefficients;
 
@@ -217,6 +223,7 @@ std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
     }
     return legs;
 }
+
 std::vector<Cloud> splitCluster(Cloud both_legs) {
 //     ROS_INFO("CLUSTER HAS %lu POINTS", both_legs.points.size());
     std::vector<Cloud> legs;
@@ -312,6 +319,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
+
     Cloud removedGround = removeGround(input_cloud);
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (!legs.empty()) {
@@ -328,11 +336,10 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         
         Cloud leftSole = findSole(left_leg, true);
         Cloud rightSole = findSole(right_leg, false);
-        pub_left_sole.publish(leftSole);
-        pub_right_sole.publish(rightSole);
+
         
-        pcl::ModelCoefficients leftSolePlane = findSolePlane(leftSole);
-        pcl::ModelCoefficients rightSolePlane = findSolePlane(rightSole);
+        pcl::ModelCoefficients leftSolePlane = findAndPublishSolePlane(leftSole, true);
+        pcl::ModelCoefficients rightSolePlane = findAndPublishSolePlane(rightSole, false);
         
         if (!leftSolePlane.values.empty()) {
 //             ROS_INFO("ModelCoefficients for the LeftSole are: %f %f %f %f", leftSolePlane.values[1],leftSolePlane.values[2],leftSolePlane.values[3],leftSolePlane.values[4]);
@@ -344,6 +351,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             publishSoleMarker(rightSolePlane, right_leg, false);
         }
     }
+    
 }
 
 int main (int argc, char** argv) {
@@ -353,7 +361,6 @@ int main (int argc, char** argv) {
 
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
-
 
     try {
         transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));
