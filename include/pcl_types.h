@@ -33,6 +33,12 @@
 #include <pcl/segmentation/extract_clusters.h>
 
 
+
+#include <iostream>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+
+
 typedef pcl::PointXYZRGB Point;
 
 typedef pcl::PointCloud<Point> Cloud;

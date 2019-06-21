@@ -2,14 +2,13 @@
 #include "ros/ros.h"
 #include "../include/pcl_types.h"
 
-#include<visualization_msgs/Marker.h>
 
 #define GND_LEVEL (0.02)
 #define MIN_X_CAMERA (-0.94)
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
 
-#define CLOUD_COUNT (300)
+#define CLOUD_COUNT (150)
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
@@ -42,76 +41,6 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     return output;
 }
 
-//side can only be left or right!
- geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
-
-    geometry_msgs::PointStamped maxX;
-    maxX.header.stamp = ros::Time::now();
-    maxX.header.frame_id = "base_link";
-    maxX.header.seq++;
-    if (!input_cloud.empty()) {
-        maxX.point.x = input_cloud.points[0].x;
-        maxX.point.y = input_cloud.points[0].y;
-        maxX.point.z = input_cloud.points[0].z;
-
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
-            float X = input_cloud.points[i].x;
-            if( X > maxX.point.x) {
-                maxX.point.x = input_cloud.points[i].x;
-                maxX.point.y = input_cloud.points[i].y;
-                maxX.point.z = input_cloud.points[i].z;
-            }
-        }
-    }
-    geometry_msgs::PointStamped oldPoint;
-    if (left) {
-        oldPoint = oldLeft;
-    }
-    else {
-        oldPoint = oldRight;
-    }
-    
-    float distance = sqrt(pow(maxX.point.x - oldPoint.point.x, 2) + pow(maxX.point.y - oldPoint.point.y, 2) + pow(maxX.point.z - maxX.point.z, 2));
-    if (distance > 0.1){
-//         ROS_INFO("The distance is: %6.4lf and it's too big!", distance);
-    }
-
-    if (left) {
-        oldLeft = maxX;
-    }
-    else {
-        oldRight = maxX;
-    }
-    
-    return maxX;
-}
-
-Cloud findlowestPoints(Cloud input_cloud) {
-    
-    Point lowest;
-    Cloud lowestPoints;
-    
-    if (!input_cloud.empty()) {
-        lowest.x = input_cloud.points[0].x;
-        lowest.y = input_cloud.points[0].y;
-        lowest.z = input_cloud.points[0].z;
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
-            float Z = input_cloud.points[i].z;
-            if( Z < lowest.z) {
-                lowest.x = input_cloud.points[i].x;
-                lowest.y = input_cloud.points[i].y;
-                lowest.z = input_cloud.points[i].z;
-            }
-        }
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
-            float Z = input_cloud.points[i].z;
-            if(Z < lowest.z + POINT_SIZE) {
-                lowestPoints.push_back(input_cloud.points[i]);
-            }
-        }
-    }
-    return lowestPoints;
-}
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
     std::vector<Cloud> legs;
@@ -237,25 +166,36 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
+void writeCloudtoFile(Cloud input, std::string name) {
+    pcl::io::savePCDFileASCII (name, input);
+    ROS_INFO("Saved %s", name.c_str());
+}
+
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     FrameCount++;
     if (FrameCount <= CLOUD_COUNT) { 
-    Cloud removedGround = removeGround(input_cloud);
-    std::vector<Cloud> legs = splitLegs(removedGround);
-    if (!legs.empty()) {
-        Cloud left_leg = legs[0];
-        Cloud right_leg = legs[1];                
-        if (!left_leg.empty()) pub_left_leg.publish(left_leg);
-        if (!right_leg.empty()) pub_right_leg.publish(right_leg);
-
-
-        
-        geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
-        geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
-        pub_left_toe.publish(left_toe);
-        pub_right_toe.publish(right_toe);
-        
-    }
+        Cloud removedGround = removeGround(input_cloud);
+        std::vector<Cloud> legs = splitLegs(removedGround);
+        if (!legs.empty()) {
+            Cloud left_leg = legs[0];
+            Cloud right_leg = legs[1];                
+            if (!left_leg.empty()) pub_left_leg.publish(left_leg);
+            if (!right_leg.empty()) pub_right_leg.publish(right_leg);
+            if (FrameCount == CLOUD_COUNT) {
+                Indices left_leg_inds, right_leg_inds;
+                for (int i = 0; i < left_leg.size(); i++) {
+                    if (left_leg.points[i].z <= 0.1) left_leg_inds.push_back(i);  
+                }
+                Cloud leftlegCropped(left_leg, left_leg_inds);
+                for (int i = 0; i < right_leg.size(); i++) {
+                    if (right_leg.points[i].z <= 0.1) right_leg_inds.push_back(i);
+                }
+                Cloud rightLegCropped(right_leg, right_leg_inds);
+                writeCloudtoFile(leftlegCropped, "/home/pelcz_uhmeu/Documents/Foot_References/leftLeg.pcd");
+                writeCloudtoFile(rightLegCropped, "/home/pelcz_uhmeu/Documents/Foot_References/rightLeg.pcd");
+                ROS_INFO("WROTE BOTH LEGS TO FILE");
+            }
+        }
     }
 }
 
@@ -281,8 +221,6 @@ int main (int argc, char** argv) {
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
     
-    pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
-    pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
     
         
     // Spin

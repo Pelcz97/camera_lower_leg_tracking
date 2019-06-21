@@ -3,6 +3,7 @@
 #include "../include/pcl_types.h"
 
 #include<visualization_msgs/Marker.h>
+#include <pcl/registration/icp.h>
 
 #define GND_LEVEL (0.02)
 #define MIN_X_CAMERA (-0.94)
@@ -10,9 +11,11 @@
 #define CLUSTER_TOLERANCE (0.03)
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftSolePlane, pub_RightSolePlane;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
 geometry_msgs::PointStamped oldLeft,oldRight;
-Cloud leftSolePlane, rightSolePlane;
+
+Cloud_ptr right_foot_reference;
+Cloud_ptr left_foot_reference;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -83,33 +86,30 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     return maxX;
 }
 
-Cloud findlowestPoints(Cloud input_cloud) {
-    
-    Point lowest;
-    Cloud lowestPoints;
-    
-    if (!input_cloud.empty()) {
-        lowest.x = input_cloud.points[0].x;
-        lowest.y = input_cloud.points[0].y;
-        lowest.z = input_cloud.points[0].z;
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
-            float Z = input_cloud.points[i].z;
-            if( Z < lowest.z) {
-                lowest.x = input_cloud.points[i].x;
-                lowest.y = input_cloud.points[i].y;
-                lowest.z = input_cloud.points[i].z;
-            }
-        }
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
-            float Z = input_cloud.points[i].z;
-            if(Z < lowest.z + POINT_SIZE) {
-                lowestPoints.push_back(input_cloud.points[i]);
-            }
-        }
-    }
-    return lowestPoints;
-}
+Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
+    pcl::IterativeClosestPoint<Point, Point> icp;
+    // Set the input source and target
+    if (left) icp.setInputSource(left_foot_reference);
+    else icp.setInputSource(right_foot_reference);
+    icp.setInputTarget(input.makeShared());
+    // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
+//     icp.setMaxCorrespondenceDistance (0.01);
+    // Set the maximum number of iterations (criterion 1)
+    icp.setMaximumIterations (100);
+    // Set the transformation epsilon (criterion 2)
+//     icp.setTransformationEpsilon (1e-8);
+    // Set the euclidean distance difference epsilon (criterion 3)
+    icp.setEuclideanFitnessEpsilon (0.001);
+    // Perform the alignment
+    Cloud Final;
+    icp.align(Final);
+    ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
+    Eigen::Matrix4f transformation = icp.getFinalTransformation ();
+    Final.header.frame_id = "base_link";
 
+    if (left) pub_LeftFoot.publish(Final);
+    else pub_RightFoot.publish(Final);
+}
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
     std::vector<Cloud> legs;
@@ -249,7 +249,10 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
         pub_left_toe.publish(left_toe);
         pub_right_toe.publish(right_toe);
-                
+        
+        
+        if (!left_leg.empty()) Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
+        if (!right_leg.empty()) Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
         
     }
     
@@ -278,8 +281,25 @@ int main (int argc, char** argv) {
     pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
     pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
     
+    pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);   
+    pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
 
         
+    Cloud left_foot_cloud, right_foot_cloud;
+    
+    if (pcl::io::loadPCDFile<Point> ("/home/pelcz_uhmeu/Documents/Foot_References/leftLeg.pcd", left_foot_cloud) == -1) //* load the file
+    {
+    PCL_ERROR ("Couldn't read file leftLeg.pcd \n");
+    return (-1);
+  }
+      if (pcl::io::loadPCDFile<Point> ("/home/pelcz_uhmeu/Documents/Foot_References/rightLeg.pcd", right_foot_cloud) == -1) //* load the file
+    {
+    PCL_ERROR ("Couldn't read file rightLeg.pcd \n");
+    return (-1);
+  }
+  
+  left_foot_reference = left_foot_cloud.makeShared();
+  right_foot_reference = right_foot_cloud.makeShared();
     // Spin
     ros::spin();
     return 0;
