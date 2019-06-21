@@ -99,7 +99,7 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
     // Set the transformation epsilon (criterion 2)
 //     icp.setTransformationEpsilon (1e-8);
     // Set the euclidean distance difference epsilon (criterion 3)
-    icp.setEuclideanFitnessEpsilon (0.001);
+//     icp.setEuclideanFitnessEpsilon (0.0001);
     // Perform the alignment
     Cloud Final;
     icp.align(Final);
