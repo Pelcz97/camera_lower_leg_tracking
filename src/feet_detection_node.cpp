@@ -103,12 +103,17 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
     // Perform the alignment
     Cloud Final;
     icp.align(Final);
-    ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
-    Eigen::Matrix4f transformation = icp.getFinalTransformation ();
-    Final.header.frame_id = "base_link";
+//     ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
+    if (icp.getFitnessScore() <= 0.0001) {
+        Eigen::Matrix4f transformation = icp.getFinalTransformation ();
+        Final.header.frame_id = "base_link";
 
-    if (left) pub_LeftFoot.publish(Final);
-    else pub_RightFoot.publish(Final);
+        if (left) pub_LeftFoot.publish(Final);
+        else pub_RightFoot.publish(Final);
+    
+        return transformation;
+    }
+    else ROS_INFO("TRANSFORMATION WAS NOT GOOD ENOUGH THE SCORE WAS: %f", icp.getFitnessScore());
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
