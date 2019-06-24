@@ -4,7 +4,7 @@
 #define POINT_SIZE (0.01)
 #define MIN_CLUSTER_SIZE (200)
 #define CLUSTER_TOLERANCE (0.03)
-#define ICP_FITNESS_THRESHHOLD (0.00015)
+#define ICP_FITNESS_THRESHHOLD (0.0001)
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
