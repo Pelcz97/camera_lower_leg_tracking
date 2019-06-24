@@ -1,14 +1,10 @@
- 
-#include "ros/ros.h"
-#include "../include/pcl_types.h"
-
-#include<visualization_msgs/Marker.h>
-#include <pcl/registration/icp.h>
+ #include "../include/pcl_types.h"
 
 #define GND_LEVEL (0.02)
-#define MIN_X_CAMERA (-0.94)
 #define POINT_SIZE (0.01)
+#define MIN_CLUSTER_SIZE (200)
 #define CLUSTER_TOLERANCE (0.03)
+#define ICP_FITNESS_THRESHHOLD (0.00015)
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
@@ -88,23 +84,14 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
     pcl::IterativeClosestPoint<Point, Point> icp;
-    // Set the input source and target
     if (left) icp.setInputSource(left_foot_reference);
     else icp.setInputSource(right_foot_reference);
     icp.setInputTarget(input.makeShared());
-    // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-//     icp.setMaxCorrespondenceDistance (0.01);
-    // Set the maximum number of iterations (criterion 1)
     icp.setMaximumIterations (100);
-    // Set the transformation epsilon (criterion 2)
-//     icp.setTransformationEpsilon (1e-8);
-    // Set the euclidean distance difference epsilon (criterion 3)
-//     icp.setEuclideanFitnessEpsilon (0.0001);
-    // Perform the alignment
     Cloud Final;
     icp.align(Final);
 //     ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
-    if (icp.getFitnessScore() <= 0.0001) {
+    if (icp.getFitnessScore() <= ICP_FITNESS_THRESHHOLD) {
         Eigen::Matrix4f transformation = icp.getFinalTransformation ();
         Final.header.frame_id = "base_link";
 
@@ -204,6 +191,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<Point> ec;
     ec.setClusterTolerance(CLUSTER_TOLERANCE);
+    ec.setMinClusterSize (MIN_CLUSTER_SIZE);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered);
     ec.extract(cluster_indices);
@@ -247,20 +235,19 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-        if (!left_leg.empty()) pub_left_leg.publish(left_leg);
-        if (!right_leg.empty()) pub_right_leg.publish(right_leg);
-
-        geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
-        geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
-        pub_left_toe.publish(left_toe);
-        pub_right_toe.publish(right_toe);
-        
-        
-        if (!left_leg.empty()) Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
-        if (!right_leg.empty()) Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
-        
+        if (!left_leg.empty()) {
+            pub_left_leg.publish(left_leg);
+            geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
+            pub_left_toe.publish(left_toe);
+            Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
+        }
+        if (!right_leg.empty()) {
+            pub_right_leg.publish(right_leg);
+            geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
+            pub_right_toe.publish(right_toe);
+            Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
+        }
     }
-    
 }
 
 int main (int argc, char** argv) {
