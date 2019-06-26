@@ -1,10 +1,13 @@
- #include "../include/pcl_types.h"
+ #include "pcl_types.h"
 
 #define GND_LEVEL (0.02)
 #define POINT_SIZE (0.01)
 #define MIN_CLUSTER_SIZE (200)
 #define CLUSTER_TOLERANCE (0.03)
 #define ICP_FITNESS_THRESHHOLD (0.0001)
+
+int Icp_error_count = 0, icp_count = 0;
+
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
@@ -83,6 +86,8 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 }
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
+    
+    icp_count++;
     pcl::IterativeClosestPoint<Point, Point> icp;
     if (left) icp.setInputSource(left_foot_reference);
     else icp.setInputSource(right_foot_reference);
@@ -97,10 +102,10 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
-    
+        
         return transformation;
     }
-    else ROS_INFO("TRANSFORMATION WAS NOT GOOD ENOUGH THE SCORE WAS: %f", icp.getFitnessScore());
+    else Icp_error_count++;
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -248,6 +253,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
         }
     }
+    float success_percent = ((float) Icp_error_count /(float) (icp_count));
+    ROS_INFO("ICP's error rate is: %f",success_percent);
 }
 
 int main (int argc, char** argv) {
