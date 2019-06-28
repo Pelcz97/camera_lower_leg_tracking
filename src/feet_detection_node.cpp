@@ -1,13 +1,6 @@
  #include "pcl_types.h"
 
-#define GND_LEVEL (0.02)
-#define POINT_SIZE (0.01)
-#define MIN_CLUSTER_SIZE (200)
-#define CLUSTER_TOLERANCE (0.03)
-#define ICP_FITNESS_THRESHHOLD (0.0001)
-
 int Icp_error_count = 0, icp_count = 0;
-
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
@@ -15,6 +8,9 @@ geometry_msgs::PointStamped oldLeft,oldRight;
 
 Cloud_ptr right_foot_reference;
 Cloud_ptr left_foot_reference;
+
+float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE;
+int MIN_CLUSTER_SIZE;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -286,6 +282,12 @@ int main (int argc, char** argv) {
         
     Cloud left_foot_cloud, right_foot_cloud;
     
+    ros::param::get("ground_level", GND_LEVEL);
+    ros::param::get("min_cluster_size", MIN_CLUSTER_SIZE);
+    ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
+    ros::param::get("point_size", POINT_SIZE);
+    ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
+
     if (pcl::io::loadPCDFile<Point> ("/home/pelcz_uhmeu/Documents/Foot_References/leftLeg.pcd", left_foot_cloud) == -1) //* load the file
     {
     PCL_ERROR ("Couldn't read file leftLeg.pcd \n");
