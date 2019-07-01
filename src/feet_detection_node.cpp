@@ -287,7 +287,11 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-        if (!init_done && !left_leg.empty() && !right_leg.empty()) init_done = init(left_leg, right_leg);
+        if (!init_done && !left_leg.empty() && !right_leg.empty()) {
+            init_done = init(left_leg, right_leg);
+            pub_left_leg.publish(left_leg);
+            pub_right_leg.publish(right_leg);
+        }
         if (init_done && !left_leg.empty()) {
             pub_left_leg.publish(left_leg);
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
