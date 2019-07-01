@@ -16,5 +16,5 @@
         <param name="min_cluster_size" value="200" />
         <param name="cluster_tolerance" value="0.03" />
         <param name="icp_fitness_threshhold" value="0.0001" />
-
+        <param name="init_frontal_capture_frame" value="50" />
 </launch>

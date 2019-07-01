@@ -1,16 +1,15 @@
  #include "pcl_types.h"
 
-int Icp_error_count = 0, icp_count = 0;
+int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
 geometry_msgs::PointStamped oldLeft,oldRight;
-
-Cloud_ptr right_foot_reference;
-Cloud_ptr left_foot_reference;
+bool init_done = false;
+Cloud_ptr right_foot_reference, left_foot_reference;
 
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE;
-int MIN_CLUSTER_SIZE;
+int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -229,6 +228,28 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
+
+bool init_front(Cloud left_leg,Cloud right_leg) {
+    init_frontal_frame++;
+    if (init_frontal_frame < INIT_FRONTAL_CAPTURE_FRAME) {
+        ROS_INFO("INIT IN %i FRAMES", INIT_FRONTAL_CAPTURE_FRAME - init_frontal_frame);
+        return false;
+    }
+    Indices left_leg_inds, right_leg_inds;
+    for (int i = 0; i < left_leg.size(); i++) {
+        if (left_leg.points[i].z <= 0.1) left_leg_inds.push_back(i);
+    }
+    Cloud leftlegCropped(left_leg, left_leg_inds);
+    for (int i = 0; i < right_leg.size(); i++) {
+        if (right_leg.points[i].z <= 0.1) right_leg_inds.push_back(i);
+    }
+    Cloud rightLegCropped(right_leg, right_leg_inds);
+    left_foot_reference = leftlegCropped.makeShared();
+    right_foot_reference = rightLegCropped.makeShared();
+    ROS_INFO("INIT SUCCESSFUL");
+    return true;
+}
+
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
     Cloud removedGround = removeGround(input_cloud);
@@ -236,13 +257,14 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-        if (!left_leg.empty()) {
+        if (!init_done && !left_leg.empty() && !right_leg.empty()) init_done = init_front(left_leg, right_leg);
+        if (init_done && !left_leg.empty()) {
             pub_left_leg.publish(left_leg);
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             pub_left_toe.publish(left_toe);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
         }
-        if (!right_leg.empty()) {
+        if (init_done && !right_leg.empty()) {
             pub_right_leg.publish(right_leg);
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             pub_right_toe.publish(right_toe);
@@ -279,28 +301,15 @@ int main (int argc, char** argv) {
     pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);   
     pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
 
-        
-    Cloud left_foot_cloud, right_foot_cloud;
-    
     ros::param::get("ground_level", GND_LEVEL);
     ros::param::get("min_cluster_size", MIN_CLUSTER_SIZE);
     ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
     ros::param::get("point_size", POINT_SIZE);
     ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
+    ros::param::get("init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
+    ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
 
-    if (pcl::io::loadPCDFile<Point> ("/home/pelcz_uhmeu/Documents/Foot_References/leftLeg.pcd", left_foot_cloud) == -1) //* load the file
-    {
-    PCL_ERROR ("Couldn't read file leftLeg.pcd \n");
-    return (-1);
-  }
-      if (pcl::io::loadPCDFile<Point> ("/home/pelcz_uhmeu/Documents/Foot_References/rightLeg.pcd", right_foot_cloud) == -1) //* load the file
-    {
-    PCL_ERROR ("Couldn't read file rightLeg.pcd \n");
-    return (-1);
-  }
-  
-  left_foot_reference = left_foot_cloud.makeShared();
-  right_foot_reference = right_foot_cloud.makeShared();
+    
     // Spin
     ros::spin();
     return 0;

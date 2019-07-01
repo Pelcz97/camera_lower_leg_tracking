@@ -16,7 +16,9 @@ find_package(catkin REQUIRED COMPONENTS roscpp
     tf2
     tf2_ros
     tf2_msgs
-    tf2_sensor_msgs)
+    tf2_sensor_msgs
+    message_generation
+    std_msgs)
 find_package(PCL 1.7 REQUIRED)
 include_directories(${catkin_INCLUDE_DIRS})
 
@@ -56,16 +58,14 @@ include_directories(${catkin_INCLUDE_DIRS})
 ## Generate messages in the 'msg' folder
 # add_message_files(
 #   FILES
-#   Message1.msg
-#   Message2.msg
+#   Foot_Reference.msg
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+  FILES
+  Init_Foot_Reference.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -75,10 +75,11 @@ include_directories(${catkin_INCLUDE_DIRS})
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  sensor_msgs # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -124,6 +125,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
   include
+  srv
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -146,6 +148,9 @@ target_link_libraries(feet_detection_node ${catkin_LIBRARIES})
 
 add_executable(test_node src/test_node.cpp)
 target_link_libraries(test_node ${catkin_LIBRARIES})
+
+add_executable(init_foot_reference_client src/init_foot_reference_client.cpp)
+target_link_libraries(init_foot_reference_client ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
