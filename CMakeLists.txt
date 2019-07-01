@@ -62,10 +62,10 @@ include_directories(${catkin_INCLUDE_DIRS})
 # )
 
 ## Generate services in the 'srv' folder
-add_service_files(
-  FILES
-  Init_Foot_Reference.srv
-)
+# add_service_files(
+#   FILES
+#   Init_Foot_Reference.srv
+# )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
