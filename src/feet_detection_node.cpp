@@ -1,4 +1,4 @@
- #include "pcl_types.h"
+#include "pcl_types.h"
 
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
@@ -8,7 +8,7 @@ geometry_msgs::PointStamped oldLeft,oldRight;
 bool init_done = false;
 Cloud_ptr right_foot_reference, left_foot_reference;
 
-float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE;
+float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
@@ -37,7 +37,7 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 }
 
 //side can only be left or right!
- geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
+geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
 
     geometry_msgs::PointStamped maxX;
     maxX.header.stamp = ros::Time::now();
@@ -48,7 +48,7 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
         maxX.point.y = input_cloud.points[0].y;
         maxX.point.z = input_cloud.points[0].z;
 
-        for( size_t i = 0; i < input_cloud.size(); i++ ){
+        for( size_t i = 0; i < input_cloud.size(); i++ ) {
             float X = input_cloud.points[i].x;
             if( X > maxX.point.x) {
                 maxX.point.x = input_cloud.points[i].x;
@@ -64,9 +64,9 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     else {
         oldPoint = oldRight;
     }
-    
+
     float distance = sqrt(pow(maxX.point.x - oldPoint.point.x, 2) + pow(maxX.point.y - oldPoint.point.y, 2) + pow(maxX.point.z - maxX.point.z, 2));
-    if (distance > 0.1){
+    if (distance > 0.1) {
 //         ROS_INFO("The distance is: %6.4lf and it's too big!", distance);
     }
 
@@ -76,12 +76,12 @@ Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
     else {
         oldRight = maxX;
     }
-    
+
     return maxX;
 }
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
-    
+
     icp_count++;
     pcl::IterativeClosestPoint<Point, Point> icp;
     if (left) icp.setInputSource(left_foot_reference);
@@ -97,7 +97,7 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
-        
+
         return transformation;
     }
     else Icp_error_count++;
@@ -138,7 +138,7 @@ std::vector<Cloud> splitCluster(Cloud both_legs) {
                 right_inds.push_back(i);
             }
         }
-    
+
         left_leg = Cloud(both_legs, left_inds);
         right_leg= Cloud(both_legs, right_inds);
         legs.push_back(left_leg);
@@ -232,22 +232,52 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 bool init_front(Cloud left_leg,Cloud right_leg) {
     init_frontal_frame++;
     if (init_frontal_frame < INIT_FRONTAL_CAPTURE_FRAME) {
-        ROS_INFO("INIT IN %i FRAMES", INIT_FRONTAL_CAPTURE_FRAME - init_frontal_frame);
+        ROS_INFO("FRONTAL_INIT IN %i FRAMES", INIT_FRONTAL_CAPTURE_FRAME - init_frontal_frame);
         return false;
     }
-    Indices left_leg_inds, right_leg_inds;
-    for (int i = 0; i < left_leg.size(); i++) {
-        if (left_leg.points[i].z <= 0.1) left_leg_inds.push_back(i);
+    if (init_frontal_frame == INIT_FRONTAL_CAPTURE_FRAME) {
+        Indices left_leg_inds, right_leg_inds;
+        for (int i = 0; i < left_leg.size(); i++) {
+            if (left_leg.points[i].z <= FOOT_HEIGHT) left_leg_inds.push_back(i);
+        }
+        Cloud leftlegCropped(left_leg, left_leg_inds);
+        for (int i = 0; i < right_leg.size(); i++) {
+            if (right_leg.points[i].z <= FOOT_HEIGHT) right_leg_inds.push_back(i);
+        }
+        Cloud rightLegCropped(right_leg, right_leg_inds);
+        left_foot_reference = leftlegCropped.makeShared();
+        right_foot_reference = rightLegCropped.makeShared();
+        ROS_INFO("FRONTAL INIT SUCCESSFUL");
     }
-    Cloud leftlegCropped(left_leg, left_leg_inds);
-    for (int i = 0; i < right_leg.size(); i++) {
-        if (right_leg.points[i].z <= 0.1) right_leg_inds.push_back(i);
-    }
-    Cloud rightLegCropped(right_leg, right_leg_inds);
-    left_foot_reference = leftlegCropped.makeShared();
-    right_foot_reference = rightLegCropped.makeShared();
-    ROS_INFO("INIT SUCCESSFUL");
     return true;
+}
+
+bool init_side(Cloud left_leg, Cloud right_leg) {
+    init_side_frame++;
+    if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
+        ROS_INFO("SIDE_INIT IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
+        return false;
+    }
+    if (init_side_frame == INIT_SIDE_CAPTURE_FRAME) {
+        Indices left_leg_inds;
+        for (int i = 0; i < left_leg.size(); i++) {
+            if (left_leg.points[i].z <= FOOT_HEIGHT) left_leg_inds.push_back(i);
+        }
+        Cloud leftlegCropped(left_leg, left_leg_inds);
+        //Calculating the length of the foot. Could be usefull later
+        float maxY = leftlegCropped.points[0].y, minY = leftlegCropped.points[0].y;
+        for (int i = 0; i < leftlegCropped.size(); i ++) {
+            if (leftlegCropped.points[i].y > maxY) maxY = leftlegCropped.points[i].y;
+            if (leftlegCropped.points[i].y < minY) minY = leftlegCropped.points[i].y;
+        }
+        ROS_INFO("SIDE INIT SUCCESSFUL");
+        ROS_INFO("The foot is %fcm long", maxY - minY);
+    }
+    return true;
+}
+
+bool init(Cloud left_leg, Cloud right_leg) {
+    return init_front(left_leg, right_leg) && init_side(left_leg, right_leg);
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
@@ -257,7 +287,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     if (!legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-        if (!init_done && !left_leg.empty() && !right_leg.empty()) init_done = init_front(left_leg, right_leg);
+        if (!init_done && !left_leg.empty() && !right_leg.empty()) init_done = init(left_leg, right_leg);
         if (init_done && !left_leg.empty()) {
             pub_left_leg.publish(left_leg);
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
@@ -294,11 +324,11 @@ int main (int argc, char** argv) {
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
-    
+
     pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
     pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
-    
-    pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);   
+
+    pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);
     pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
 
     ros::param::get("ground_level", GND_LEVEL);
@@ -307,9 +337,10 @@ int main (int argc, char** argv) {
     ros::param::get("point_size", POINT_SIZE);
     ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
     ros::param::get("init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
-//     ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
+    ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
+    ros::param::get("foot_height", FOOT_HEIGHT);
 
-    
+
     // Spin
     ros::spin();
     return 0;

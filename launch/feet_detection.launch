@@ -17,4 +17,6 @@
         <param name="cluster_tolerance" value="0.03" />
         <param name="icp_fitness_threshhold" value="0.0001" />
         <param name="init_frontal_capture_frame" value="50" />
+        <param name="init_side_capture_frame" value="50" />
+        <param name="foot_height" value="0.1" />
 </launch>
