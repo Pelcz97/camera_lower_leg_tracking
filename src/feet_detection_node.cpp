@@ -271,8 +271,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
         }
     }
-    float success_percent = ((float) Icp_error_count /(float) (icp_count));
-    ROS_INFO("ICP's error rate is: %f",success_percent);
+//     float success_percent = ((float) Icp_error_count /(float) (icp_count));
+//     ROS_INFO("ICP's error rate is: %f",success_percent);
 }
 
 int main (int argc, char** argv) {
@@ -307,7 +307,7 @@ int main (int argc, char** argv) {
     ros::param::get("point_size", POINT_SIZE);
     ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
     ros::param::get("init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
-    ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
+//     ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
 
     
     // Spin
