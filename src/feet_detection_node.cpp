@@ -3,12 +3,12 @@
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel;
 geometry_msgs::PointStamped oldLeft,oldRight;
 bool init_done = false;
 Cloud_ptr right_foot_reference, left_foot_reference;
 
-float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT;
+float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
@@ -273,12 +273,54 @@ bool init_side(Cloud left_leg) {
         }
         ROS_INFO("SIDE INIT SUCCESSFUL");
         ROS_INFO("The foot is %fcm long", maxY - minY);
+        footLength = maxY - minY;
     }
     return true;
 }
 
 bool init(Cloud left_leg, Cloud right_leg) {
     return init_front(left_leg, right_leg) && init_side(left_leg);
+}
+
+void removeRow(Eigen::MatrixXf& matrix, unsigned int rowToRemove)
+{
+    unsigned int numRows = matrix.rows()-1;
+    unsigned int numCols = matrix.cols();
+
+    if( rowToRemove < numRows )
+        matrix.block(rowToRemove,0,numRows-rowToRemove,numCols) = matrix.block(rowToRemove+1,0,numRows-rowToRemove,numCols);
+
+    matrix.conservativeResize(numRows,numCols);
+}
+
+void removeColumn(Eigen::MatrixXf& matrix, unsigned int colToRemove)
+{
+    unsigned int numRows = matrix.rows();
+    unsigned int numCols = matrix.cols()-1;
+
+    if( colToRemove < numCols )
+        matrix.block(0,colToRemove,numRows,numCols-colToRemove) = matrix.block(0,colToRemove+1,numRows,numCols-colToRemove);
+
+    matrix.conservativeResize(numRows,numCols);
+}
+
+geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::MatrixXf footPose) {
+    geometry_msgs::PointStamped heel;
+    heel.header.stamp = ros::Time::now();
+    heel.header.frame_id = "base_link";
+    heel.header.seq++;
+    Eigen::Vector3f negXAxis(-1.0,0.0,0.0);
+//     std::cout << "Transformation was :\n" << footPose << std::endl;
+    removeColumn(footPose, 3);
+    removeRow(footPose, 3);
+//     std::cout << "Rotation is :\n" << footPose << std::endl;
+    Eigen::Vector3f footVector = footLength * negXAxis;
+    Eigen::Vector3f heelDirection = footPose * footVector;
+    heel.point.x = toe.point.x + heelDirection(0);
+    heel.point.y = toe.point.y + heelDirection(1);
+    heel.point.z = toe.point.z + heelDirection(2);
+    
+    return heel;
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
@@ -298,12 +340,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             pub_left_toe.publish(left_toe);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
+            geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
+            pub_left_heel.publish(left_heel);
         }
         if (init_done && !right_leg.empty()) {
             pub_right_leg.publish(right_leg);
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             pub_right_toe.publish(right_toe);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
+            geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
+            pub_right_heel.publish(right_heel);
         }
     }
 //     float success_percent = ((float) Icp_error_count /(float) (icp_count));
@@ -336,6 +382,9 @@ int main (int argc, char** argv) {
     pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);
     pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
 
+    pub_left_heel = nh.advertise<geometry_msgs::PointStamped>("left_heel", 1);
+    pub_right_heel = nh.advertise<geometry_msgs::PointStamped>("right_heel", 1);
+    
     ros::param::get("ground_level", GND_LEVEL);
     ros::param::get("min_cluster_size", MIN_CLUSTER_SIZE);
     ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
