@@ -252,7 +252,8 @@ bool init_front(Cloud left_leg,Cloud right_leg) {
     return true;
 }
 
-bool init_side(Cloud left_leg, Cloud right_leg) {
+//The side init only uses the left leg. So for the init you have to turn right (So the left leg is in front) and place your right leg a bit away from the left leg (It has to be more right than the left leg).
+bool init_side(Cloud left_leg) {
     init_side_frame++;
     if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
         ROS_INFO("SIDE_INIT IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
@@ -277,7 +278,7 @@ bool init_side(Cloud left_leg, Cloud right_leg) {
 }
 
 bool init(Cloud left_leg, Cloud right_leg) {
-    return init_front(left_leg, right_leg) && init_side(left_leg, right_leg);
+    return init_front(left_leg, right_leg) && init_side(left_leg);
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
