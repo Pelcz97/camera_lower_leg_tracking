@@ -40,6 +40,8 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 
+#include <std_srvs/Trigger.h>
+
 
 typedef pcl::PointXYZRGB Point;
 
