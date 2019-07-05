@@ -257,6 +257,7 @@ bool init_side(Cloud left_leg) {
     init_side_frame++;
     if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
         ros::param::get("point_size_pre_init", POINT_SIZE);
+                ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
         ROS_INFO("SIDE_INIT IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
         return false;
     }
@@ -275,6 +276,7 @@ bool init_side(Cloud left_leg) {
         ROS_INFO("SIDE INIT SUCCESSFUL");
         ROS_INFO("The foot is %fcm long", maxY - minY);
         ros::param::get("point_size_post_init", POINT_SIZE);
+        ros::param::get("min_cluster_size_post_init", MIN_CLUSTER_SIZE);
         footLength = maxY - minY;
     }
     return true;
@@ -378,6 +380,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 bool init_reset(std_srvs::Trigger::Request& request, std_srvs::Trigger::Response& response) {
   ROS_INFO("RESET INIT");
   init_done = false;
+  init_side_frame = 0;
+  init_frontal_frame = 0;
   response.success = true;
   response.message = "The initialisation will restart now!";
   return true;
@@ -419,7 +423,7 @@ int main (int argc, char** argv) {
 
     
     ros::param::get("ground_level", GND_LEVEL);
-    ros::param::get("min_cluster_size", MIN_CLUSTER_SIZE);
+    ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
     ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
     ros::param::get("point_size_pre_init", POINT_SIZE);
     ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);

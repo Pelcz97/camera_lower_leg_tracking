@@ -15,6 +15,8 @@
         <param name="point_size_post_init" value="0.01" />
         <param name="point_size_pre_init" value="0.001" />
         <param name="min_cluster_size" value="200" />
+        <param name="min_cluster_size_post_init" value="200" />
+        <param name="min_cluster_size_pre_init" value="2000" />
         <param name="cluster_tolerance" value="0.03" />
         <param name="icp_fitness_threshhold" value="0.0001" />
         <param name="init_frontal_capture_frame" value="50" />
