@@ -14,7 +14,6 @@
         <param name="ground_level" value="0.02" />
         <param name="point_size_post_init" value="0.01" />
         <param name="point_size_pre_init" value="0.001" />
-        <param name="min_cluster_size" value="200" />
         <param name="min_cluster_size_post_init" value="200" />
         <param name="min_cluster_size_pre_init" value="20000" />
         <param name="cluster_tolerance" value="0.03" />

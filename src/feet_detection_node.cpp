@@ -166,14 +166,14 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 
     Cloud_ptr input_cloud_ptr = input_cloud.makeShared();
 
-     ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud.points.size());
+//      ROS_INFO("PointCloud before filtering has: %lu data points", input_cloud.points.size());
     // Create the filtering object: downsample the dataset using a leaf size of 1cm
     pcl::VoxelGrid<Point> vg;
     Cloud_ptr cloud_filtered(new Cloud);
     vg.setInputCloud (input_cloud_ptr);
     vg.setLeafSize (POINT_SIZE, POINT_SIZE, POINT_SIZE);
     vg.filter (*cloud_filtered);
-     ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
+//      ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
 
     std::vector<Cloud> legs;
 
