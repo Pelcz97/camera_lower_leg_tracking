@@ -2,6 +2,8 @@
 #ifndef _PCL_TYPES_H
 #define _PCL_TYPES_H
 
+#include <math.h>
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
