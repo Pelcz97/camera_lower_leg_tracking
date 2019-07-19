@@ -5,11 +5,12 @@ int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip;
 geometry_msgs::PointStamped oldLeft,oldRight;
-bool init_done = false;
 Cloud_ptr right_foot_reference, left_foot_reference;
+Cloud side_init_cloud;
+bool init_front_done = false, init_side_done = false;
 
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
-int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME;
+int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME,  INIT_SIDE_END_FRAME;
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -123,39 +124,39 @@ std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
 
 std::vector<Cloud> splitCluster(Cloud both_legs) {
 //     ROS_INFO("CLUSTER HAS %lu POINTS", both_legs.points.size());
-        std::vector<Cloud> legs;
-        Point center;
-        pcl::computeCentroid (both_legs, center);
-        Cloud left_leg, right_leg;
-        if (init_done && both_legs.points.size() > 1000) {
-            Indices left_inds, right_inds;
-            for( size_t i = 0; i < both_legs.size(); i++ ) {
-                float y = both_legs.points[i].y;
-                if( y > center.y) {
-                    left_inds.push_back(i);
-                }
-                else {
-                    right_inds.push_back(i);
-                }
+    std::vector<Cloud> legs;
+    Point center;
+    pcl::computeCentroid (both_legs, center);
+    Cloud left_leg, right_leg;
+    if (both_legs.points.size() > 1000) {
+        Indices left_inds, right_inds;
+        for( size_t i = 0; i < both_legs.size(); i++ ) {
+            float y = both_legs.points[i].y;
+            if( y > center.y) {
+                left_inds.push_back(i);
             }
+            else {
+                right_inds.push_back(i);
+            }
+        }
 
-            left_leg = Cloud(both_legs, left_inds);
-            right_leg= Cloud(both_legs, right_inds);
-            legs.push_back(left_leg);
-            legs.push_back(right_leg);
-            return legs;
-        }
-        if (center.y >= 0) {
-            ROS_INFO("ONLY LEFT LEG IN FRAME");
-            legs.push_back(both_legs);
-            legs.push_back(right_leg);
-        }
-        else {
-            ROS_INFO("ONLY RIGHT LEG IN FRAME");
-            legs.push_back(left_leg);
-            legs.push_back(both_legs);
-        }
+        left_leg = Cloud(both_legs, left_inds);
+        right_leg= Cloud(both_legs, right_inds);
+        legs.push_back(left_leg);
+        legs.push_back(right_leg);
         return legs;
+    }
+    if (center.y >= 0) {
+        ROS_INFO("ONLY LEFT LEG IN FRAME");
+        legs.push_back(both_legs);
+        legs.push_back(right_leg);
+    }
+    else {
+        ROS_INFO("ONLY RIGHT LEG IN FRAME");
+        legs.push_back(left_leg);
+        legs.push_back(both_legs);
+    }
+    return legs;
 }
 
 //With splitLegs a vector will be filled where the first entry is left and and the second is right.
@@ -228,49 +229,46 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
-// float getFootHeight(Cloud leg, Point toe) {
-//   float height= 0;
-// 
-//   Indices indices;
-//   for (int i = 0; i < leg.size(); i++) {
-//       if (std::abs(leg.points[i].x - toe.x) < 0.03) indices.push_back(i);
-//   }
-//   
-//   Cloud footStrip(leg,indices);
-//   
-//   // Create the normal estimation class, and pass the input dataset to it
-//   pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
-//   ne.setInputCloud (footStrip.makeShared());
-// 
-//   // Create an empty kdtree representation, and pass it to the normal estimation object.
-//   // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
-//   pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
-//   ne.setSearchMethod (tree);
-// 
-//   // Output datasets
-//   pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
-// 
-//   // Use all neighbors in a sphere of radius 3cm
-//   ne.setRadiusSearch (0.03);
-// 
-//   // Compute the features
-//   ne.compute (*cloud_normals);
-//   
-//   Eigen::Vector3f YZVector = (0,1,1);
-//   for (int i = 0; i < cloud_normals->size(); i++) {
-//     cloud_normals->points[i].x;
-//   }
-//   
-//   pub_foot_strip.publish(footStrip);
-//   
-//   return height;
-// }
+float getFootHeight(Cloud leg, Point toe) {
+    float height= 0;
 
-bool init_front(Cloud left_leg,Cloud right_leg) {
+    Indices indices;
+    for (int i = 0; i < leg.size(); i++) {
+        if (std::abs(leg.points[i].x - toe.x) < 0.03) indices.push_back(i);
+    }
+
+    Cloud footStrip(leg,indices);
+
+    // Create the normal estimation class, and pass the input dataset to it
+    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
+    ne.setInputCloud (footStrip.makeShared());
+
+    // Create an empty kdtree representation, and pass it to the normal estimation object.
+    // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
+    ne.setSearchMethod (tree);
+
+    // Output datasets
+    pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+
+    // Use all neighbors in a sphere of radius 3cm
+    ne.setRadiusSearch (0.03);
+
+    // Compute the features
+    ne.compute (*cloud_normals);
+
+    
+
+    pub_foot_strip.publish(footStrip);
+
+    return height;
+}
+
+void front_init(Cloud left_leg,Cloud right_leg) {
     init_frontal_frame++;
     if (init_frontal_frame < INIT_FRONTAL_CAPTURE_FRAME) {
         ROS_INFO("FRONTAL_INIT IN %i FRAMES", INIT_FRONTAL_CAPTURE_FRAME - init_frontal_frame);
-        return false;
+        return;
     }
     if (init_frontal_frame == INIT_FRONTAL_CAPTURE_FRAME) {
         Indices left_leg_inds, right_leg_inds;
@@ -284,45 +282,89 @@ bool init_front(Cloud left_leg,Cloud right_leg) {
         Cloud rightLegCropped(right_leg, right_leg_inds);
         left_foot_reference = leftlegCropped.makeShared();
         right_foot_reference = rightLegCropped.makeShared();
+        init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
     }
-    return true;
+    return;
 }
 
 //The side init only uses the left leg. So for the init you have to turn right (So the left leg is in front) and place your right leg a bit away from the left leg (It has to be more right than the left leg).
-bool init_side(Cloud leg) {
+void side_init(Cloud cloud) {
     init_side_frame++;
     if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
         ros::param::get("point_size_pre_init", POINT_SIZE);
         ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
-        ROS_INFO("SIDE_INIT IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
-        return false;
+        ROS_INFO("RECORDING BEGINS IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
     }
-    if (init_side_frame == INIT_SIDE_CAPTURE_FRAME) {
-        Indices leg_inds;
-        for (int i = 0; i < leg.size(); i++) {
-            if (leg.points[i].z <= FOOT_HEIGHT) leg_inds.push_back(i);
+    else if (init_side_frame < INIT_SIDE_END_FRAME) {
+        ROS_INFO("RECORDING ENDS IN %i FRAMES", INIT_SIDE_END_FRAME - init_side_frame);
+        side_init_cloud += cloud;
+    }
+    else if (init_side_frame == INIT_SIDE_END_FRAME) {
+        ROS_INFO("Processing the Side Init");
+        ROS_INFO("PointCloud before filtering has: %lu data points", side_init_cloud.points.size());
+        ros::param::get("point_size_pre_init", POINT_SIZE);
+        ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
+        pcl::VoxelGrid<Point> vg;
+        Cloud_ptr cloud_filtered(new Cloud);
+        vg.setInputCloud (side_init_cloud.makeShared());
+        vg.setLeafSize (POINT_SIZE, POINT_SIZE, POINT_SIZE);
+        vg.filter (*cloud_filtered);
+     ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
+
+        std::vector<Cloud> legs;
+
+
+        if (cloud_filtered->empty()) {
+            ROS_INFO("Side Init Input is empty");
         }
-        Cloud legCropped(leg, leg_inds);
+
+        // Creating the KdTree object for the search method of the extraction
+        pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point>);
+        tree->setInputCloud (cloud_filtered);
+
+        //Setting the parameters for cluster extraction
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<Point> ec;
+        ec.setClusterTolerance(CLUSTER_TOLERANCE);
+        ec.setSearchMethod(tree);
+        ec.setInputCloud(cloud_filtered);
+        ec.extract(cluster_indices);
+
+        std::vector<Cloud> clusters;
+        //Creating PointClouds for each cluster. clusters is sorted by the size of the cluster.
+        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
+        {
+            Cloud cloud_cluster(*cloud_filtered, it->indices );
+            clusters.push_back(cloud_cluster);
+        }
+
+        std::vector<Cloud> both_legs = findOrientation(clusters[0], clusters[1]);
+        Cloud left_leg = both_legs[0];
+        left_leg.header.frame_id = "base_link";
+        Cloud right_leg = both_legs[1];
+        right_leg.header.frame_id = "base_link";
+        pub_left_leg.publish(left_leg);
+        pub_right_leg.publish(right_leg);
+        
+        Cloud leg = both_legs[1];
+
+        Cloud legCropped = leg;
         //Calculating the length of the foot. Could be usefull later
         Point maxY = legCropped.points[0], minY = legCropped.points[0];
         for (int i = 0; i < legCropped.size(); i ++) {
             if (legCropped.points[i].y > maxY.y) maxY = legCropped.points[i];
             if (legCropped.points[i].y < minY.y) minY = legCropped.points[i];
         }
-//         float footHeight = getFootHeight(leg, maxY);
+        ROS_INFO("CLUSTERING DONE GETTING FOOT HEIGHT");
+        float footHeight = getFootHeight(leg, maxY);
         ROS_INFO("SIDE INIT SUCCESSFUL");
         ROS_INFO("The foot is %fcm long", maxY.y - minY.y);
         ros::param::get("point_size_post_init", POINT_SIZE);
         ros::param::get("min_cluster_size_post_init", MIN_CLUSTER_SIZE);
         footLength = maxY.y - minY.y;
-//         geometry_msgs::PointStamped msgMaxY, msgMinY;
+        init_side_done = true;
     }
-    return true;
-}
-
-bool init(Cloud left_leg, Cloud right_leg) {
-    return  init_side(right_leg) && init_front(left_leg, right_leg);
 }
 
 void removeRow(Eigen::MatrixXf& matrix, unsigned int rowToRemove) {
@@ -377,20 +419,21 @@ geometry_msgs::PointStamped findAnkle(geometry_msgs::PointStamped heel) {
     return ankle;
 }
 
+bool init() {
+    return init_side_done && init_front_done;
+}
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
     Cloud removedGround = removeGround(input_cloud);
-    std::vector<Cloud> legs = splitLegs(removedGround);
-    if (!legs.empty()) {
+    if (!removedGround.empty() && !init_side_done) side_init(removedGround);
+    std::vector<Cloud> legs;
+    if (init_side_done) legs = splitLegs(removedGround);
+    if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
+    if (init() && !legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
-        if (!init_done && !left_leg.empty() && !right_leg.empty()) {
-            init_done = init(left_leg, right_leg);
-            pub_left_leg.publish(left_leg);
-            pub_right_leg.publish(right_leg);
-        }
-        if (init_done && !left_leg.empty()) {
+        if (!left_leg.empty()) {
             pub_left_leg.publish(left_leg);
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             pub_left_toe.publish(left_toe);
@@ -400,7 +443,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
             pub_left_ankle.publish(left_ankle);
         }
-        if (init_done && !right_leg.empty()) {
+        if (init() && !right_leg.empty()) {
             pub_right_leg.publish(right_leg);
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             pub_right_toe.publish(right_toe);
@@ -418,7 +461,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 bool init_reset(std_srvs::Trigger::Request& request, std_srvs::Trigger::Response& response) {
     ROS_INFO("RESET INIT");
-    init_done = false;
+    init_front_done = false;
+    init_side_done = false;
     init_side_frame = 0;
     init_frontal_frame = 0;
     response.success = true;
@@ -459,7 +503,7 @@ int main (int argc, char** argv) {
     pub_right_ankle = nh.advertise<geometry_msgs::PointStamped>("right_ankle", 1);
 
     ros::ServiceServer service = nh.advertiseService("camera_lower_leg_tracking/init_reset", init_reset);
-    
+
     pub_foot_strip = nh.advertise<sensor_msgs::PointCloud2>("footStrip", 1);
 
 
@@ -471,6 +515,7 @@ int main (int argc, char** argv) {
     ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
     ros::param::get("init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
     ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
+    ros::param::get("init_side_end_frame", INIT_SIDE_END_FRAME);
     ros::param::get("foot_height", FOOT_HEIGHT);
 
 
