@@ -229,19 +229,12 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
-float getFootHeight(Cloud leg, Point toe) {
+float getFootHeight(Cloud leg) {
     float height= 0;
 
-    Indices indices;
-    for (int i = 0; i < leg.size(); i++) {
-        if (std::abs(leg.points[i].x - toe.x) < 0.03) indices.push_back(i);
-    }
-
-    Cloud footStrip(leg,indices);
-
     // Create the normal estimation class, and pass the input dataset to it
-    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::Normal> ne;
-    ne.setInputCloud (footStrip.makeShared());
+    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::PointXYZRGBNormal> ne;
+    ne.setInputCloud (leg.makeShared());
 
     // Create an empty kdtree representation, and pass it to the normal estimation object.
     // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
@@ -249,7 +242,7 @@ float getFootHeight(Cloud leg, Point toe) {
     ne.setSearchMethod (tree);
 
     // Output datasets
-    pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_normals (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
 
     // Use all neighbors in a sphere of radius 3cm
     ne.setRadiusSearch (0.03);
@@ -257,9 +250,11 @@ float getFootHeight(Cloud leg, Point toe) {
     // Compute the features
     ne.compute (*cloud_normals);
 
+    for (int i = 0; i < cloud_normals->size(); i++) {
+      if (std::abs(cloud_normals->points[i].normal_z) < 0.001) ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", cloud_normals->points[i].x, cloud_normals->points[i].y, cloud_normals->points[i].z);
+    }
     
-
-    pub_foot_strip.publish(footStrip);
+    pub_foot_strip.publish(leg);
 
     return height;
 }
@@ -346,18 +341,19 @@ void side_init(Cloud cloud) {
         right_leg.header.frame_id = "base_link";
         pub_left_leg.publish(left_leg);
         pub_right_leg.publish(right_leg);
+        ROS_INFO("CLUSTERING DONE GETTING FOOT HEIGHT");
+
         
         Cloud leg = both_legs[1];
 
         Cloud legCropped = leg;
+        float footHeight = getFootHeight(leg);
         //Calculating the length of the foot. Could be usefull later
         Point maxY = legCropped.points[0], minY = legCropped.points[0];
         for (int i = 0; i < legCropped.size(); i ++) {
             if (legCropped.points[i].y > maxY.y) maxY = legCropped.points[i];
             if (legCropped.points[i].y < minY.y) minY = legCropped.points[i];
         }
-        ROS_INFO("CLUSTERING DONE GETTING FOOT HEIGHT");
-        float footHeight = getFootHeight(leg, maxY);
         ROS_INFO("SIDE INIT SUCCESSFUL");
         ROS_INFO("The foot is %fcm long", maxY.y - minY.y);
         ros::param::get("point_size_post_init", POINT_SIZE);
