@@ -344,11 +344,10 @@ void side_init(Cloud cloud) {
         ROS_INFO("CLUSTERING DONE GETTING FOOT HEIGHT");
 
         
-        Cloud leg = both_legs[1];
+        float footHeight = getFootHeight(right_leg);
+        
+        Cloud legCropped = right_leg;
 
-        Cloud legCropped = leg;
-        float footHeight = getFootHeight(leg);
-        //Calculating the length of the foot. Could be usefull later
         Point maxY = legCropped.points[0], minY = legCropped.points[0];
         for (int i = 0; i < legCropped.size(); i ++) {
             if (legCropped.points[i].y > maxY.y) maxY = legCropped.points[i];
