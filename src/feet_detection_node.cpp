@@ -249,49 +249,20 @@ float getFootHeight(Cloud leg) {
 
     // Compute the features
     ne.compute (*cloud_normals);
-    
+
     Indices indices;
 
     for (int i = 0; i < cloud_normals->size(); i++) {
-      if (std::abs(cloud_normals->points[i].normal_z) < 0.1) {
+        if (std::abs(cloud_normals->points[i].normal_z) < 0.1) {
 //           ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", leg.points[i].x, leg.points[i].y, leg.points[i].z);
-          indices.push_back(i);
-      }
+            indices.push_back(i);
+        }
     }
 
     Cloud normalLeg(leg, indices);
-    
-        std::vector<Cloud> legs;
 
-        // Creating the KdTree object for the search method of the extraction
-        tree->setInputCloud (normalLeg.makeShared());
-
-        //Setting the parameters for cluster extraction
-        std::vector<pcl::PointIndices> cluster_indices;
-        pcl::EuclideanClusterExtraction<Point> ec;
-        ec.setClusterTolerance(CLUSTER_TOLERANCE);
-        ec.setSearchMethod(tree);
-        ec.setInputCloud(normalLeg.makeShared());
-        ec.extract(cluster_indices);
-
-        std::vector<Cloud> clusters;
-        //Creating PointClouds for each cluster. clusters is sorted by the size of the cluster.
-        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
-        {
-            Cloud cloud_cluster(normalLeg, it->indices );
-            clusters.push_back(cloud_cluster);
-        }
-    float minZ = 2;
-    for (int i = 0; i < clusters[0].size(); i++) {
-        if (clusters[0].points[i].z < minZ) minZ = clusters[0].points[i].z;
-    }
-    
-    float maxZ  = 0;
-    for (int i = 0; i < clusters[1].size(); i++) {
-        if (clusters[1].points[i].z > maxZ) maxZ = clusters[1].points[i].z;
-    }
-    height = (minZ + maxZ) / 2;
-    ROS_INFO("minZ is: %f and maxZ is %f. The Middle is %f", minZ, maxZ, height);
+    //HAS TO BE REMOVED
+    height = 0.15;
     pub_foot_strip.publish(normalLeg);
 
     return height;
@@ -343,7 +314,7 @@ void side_init(Cloud cloud) {
         vg.setInputCloud (side_init_cloud.makeShared());
         vg.setLeafSize (POINT_SIZE, POINT_SIZE, POINT_SIZE);
         vg.filter (*cloud_filtered);
-     ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
+        ROS_INFO("PointCloud after filtering has: %lu data points", cloud_filtered->points.size());
 
         std::vector<Cloud> legs;
 
@@ -381,9 +352,9 @@ void side_init(Cloud cloud) {
         pub_right_leg.publish(right_leg);
         ROS_INFO("CLUSTERING DONE GETTING FOOT HEIGHT");
 
-        
+
         FOOT_HEIGHT = getFootHeight(right_leg);
-        
+
         Cloud legCropped = right_leg;
 
         Point maxY = legCropped.points[0], minY = legCropped.points[0];
