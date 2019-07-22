@@ -21,5 +21,4 @@
         <param name="init_frontal_capture_frame" value="150" />
         <param name="init_side_end_frame" value="80" />
         <param name="init_side_capture_frame" value="75" />
-        <param name="foot_height" value="0.12" />
 </launch>
