@@ -3,9 +3,9 @@
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg;
 geometry_msgs::PointStamped oldLeft,oldRight;
-Cloud_ptr right_foot_reference, left_foot_reference;
+Cloud_ptr right_foot_reference, left_foot_reference, right_leg_reference, left_leg_reference;
 Cloud side_init_cloud;
 bool init_front_done = false, init_side_done = false;
 
@@ -98,6 +98,29 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
+
+        return transformation;
+    }
+    else Icp_error_count++;
+}
+
+Eigen::Matrix4f findLegTransformation(Cloud input, int left) {
+
+    icp_count++;
+    pcl::IterativeClosestPoint<Point, Point> icp;
+    if (left) icp.setInputSource(left_leg_reference);
+    else icp.setInputSource(right_leg_reference);
+    icp.setInputTarget(input.makeShared());
+    icp.setMaximumIterations (100);
+    Cloud Final;
+    icp.align(Final);
+//     ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
+    if (icp.getFitnessScore() <= ICP_FITNESS_THRESHHOLD) {
+        Eigen::Matrix4f transformation = icp.getFinalTransformation ();
+        Final.header.frame_id = "base_link";
+
+        if (left) pub_LeftLeg.publish(Final);
+        else pub_RightLeg.publish(Final);
 
         return transformation;
     }
@@ -313,17 +336,25 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         return;
     }
     if (init_frontal_frame == INIT_FRONTAL_CAPTURE_FRAME) {
-        Indices left_leg_inds, right_leg_inds;
+        Indices left_foot_inds, right_foot_inds, left_leg_inds, right_leg_inds;
         for (int i = 0; i < left_leg.size(); i++) {
-            if (left_leg.points[i].z <= FOOT_HEIGHT) left_leg_inds.push_back(i);
+            if (left_leg.points[i].z <= FOOT_HEIGHT) left_foot_inds.push_back(i);
+            else left_leg_inds.push_back(i);
         }
-        Cloud leftlegCropped(left_leg, left_leg_inds);
+        Cloud leftFootCropped(left_leg, left_foot_inds);
+        Cloud leftLegCropped(left_leg, left_leg_inds);
         for (int i = 0; i < right_leg.size(); i++) {
-            if (right_leg.points[i].z <= FOOT_HEIGHT) right_leg_inds.push_back(i);
+            if (right_leg.points[i].z <= FOOT_HEIGHT) right_foot_inds.push_back(i);
+            else right_leg_inds.push_back(i);
         }
+        Cloud rightFootCropped(right_leg, right_foot_inds);
         Cloud rightLegCropped(right_leg, right_leg_inds);
-        left_foot_reference = leftlegCropped.makeShared();
-        right_foot_reference = rightLegCropped.makeShared();
+
+        left_foot_reference = leftFootCropped.makeShared();
+        right_foot_reference = rightFootCropped.makeShared();
+        right_leg_reference = rightLegCropped.makeShared();
+        left_leg_reference = leftLegCropped.makeShared();
+
         init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
     }
@@ -480,6 +511,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             pub_left_toe.publish(left_toe);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
+            Eigen::Matrix4f leftLegTrans = findLegTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
             pub_left_heel.publish(left_heel);
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
@@ -490,6 +522,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             pub_right_toe.publish(right_toe);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
+            Eigen::Matrix4f rightLegTrans = findLegTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
             pub_right_heel.publish(right_heel);
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
@@ -537,6 +570,9 @@ int main (int argc, char** argv) {
 
     pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);
     pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
+    
+    pub_LeftLeg = nh.advertise<sensor_msgs::PointCloud2>("left_Leg_icp",1);
+    pub_RightLeg = nh.advertise<sensor_msgs::PointCloud2>("right_Leg_icp",1);
 
     pub_left_heel = nh.advertise<geometry_msgs::PointStamped>("left_heel", 1);
     pub_right_heel = nh.advertise<geometry_msgs::PointStamped>("right_heel", 1);
