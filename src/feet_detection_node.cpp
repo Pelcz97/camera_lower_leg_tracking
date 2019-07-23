@@ -229,41 +229,79 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
-float getFootHeight(Cloud leg) {
-    float height= 0;
 
-    // Create the normal estimation class, and pass the input dataset to it
-    pcl::NormalEstimation<pcl::PointXYZRGB, pcl::PointXYZRGBNormal> ne;
-    ne.setInputCloud (leg.makeShared());
+double cosine_similarity(double *A, double *B, unsigned int size)
+{
+    double mul = 0.0;
+    double d_a = 0.0;
+    double d_b = 0.0 ;
 
-    // Create an empty kdtree representation, and pass it to the normal estimation object.
-    // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
-    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
-    ne.setSearchMethod (tree);
-
-    // Output datasets
-    pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_normals (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
-
-    // Use all neighbors in a sphere of radius 3cm
-    ne.setRadiusSearch (0.03);
-
-    // Compute the features
-    ne.compute (*cloud_normals);
-
-    Indices indices;
-
-    for (int i = 0; i < cloud_normals->size(); i++) {
-        if (std::abs(cloud_normals->points[i].normal_z) < 0.1) {
-//           ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", leg.points[i].x, leg.points[i].y, leg.points[i].z);
-            indices.push_back(i);
-        }
+    for(unsigned int i = 0; i < size; ++i)
+    {
+        mul += *A * *B;
+        d_a += *A * *A;
+        d_b += *B * *B;
+        A++;
+        B++;
     }
 
-    Cloud normalLeg(leg, indices);
+    if (d_a == 0.0f || d_b == 0.0f)
+    {
+        throw std::logic_error(
+                "cosine similarity is not defined whenever one or both "
+                "input vectors are zero-vectors.");
+    }
 
-    //HAS TO BE REMOVED
-    height = 0.15;
-    pub_foot_strip.publish(normalLeg);
+    return mul / (sqrt(d_a) * sqrt(d_b)) ;
+}
+
+float getFootHeight(Cloud leg) {
+//     // Create the normal estimation class, and pass the input dataset to it
+//     pcl::NormalEstimation<pcl::PointXYZRGB, pcl::PointXYZRGBNormal> ne;
+//     ne.setInputCloud (leg.makeShared());
+// 
+//     // Create an empty kdtree representation, and pass it to the normal estimation object.
+//     // Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
+//     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGB> ());
+//     ne.setSearchMethod (tree);
+// 
+//     // Output datasets
+//     pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr cloud_normals (new pcl::PointCloud<pcl::PointXYZRGBNormal>);
+// 
+//     // Use all neighbors in a sphere of radius 3cm
+//     ne.setRadiusSearch (0.05);
+// 
+//     // Compute the features
+//     ne.compute (*cloud_normals);
+// 
+//     double legNormal[3] = {1.0, 0.0, 0.0};
+//     Indices indices;
+//     for (int i = 0; i < cloud_normals->size(); i++) {
+//         double currentNormal[3] = {cloud_normals->points[i].normal_x, cloud_normals->points[i].normal_y, cloud_normals->points[i].normal_z};
+//         if (cosine_similarity(legNormal, currentNormal, 3) < 0.0001) {
+//           ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", leg.points[i].x, leg.points[i].y, leg.points[i].z);
+//             indices.push_back(i);
+//         }
+//     }
+//     Cloud normalLeg(leg, indices);
+//     pub_foot_strip.publish(normalLeg);
+
+    Point centroid;
+    pcl::computeCentroid (leg, centroid);
+    
+//     geometry_msgs::PointStamped centroid_msg;
+//     centroid_msg.header.frame_id = "base_link";
+//     centroid_msg.header.seq++;
+//     centroid_msg.point.x = centroid.x;
+//     centroid_msg.point.y = centroid.y;
+//     centroid_msg.point.z = centroid.z;
+//     pub_right_ankle.publish(centroid_msg);
+//     
+    
+    //Seems really risky and may not work all the times.
+    float height = 0.6 * centroid.z;
+    ROS_INFO("The foot is %fcm high", height);
+    ROS_INFO("The centroid is %fcm high", centroid.z);
 
     return height;
 }
@@ -366,7 +404,7 @@ void side_init(Cloud cloud) {
         ROS_INFO("The foot is %fcm long", maxY.y - minY.y);
         ros::param::get("point_size_post_init", POINT_SIZE);
         ros::param::get("min_cluster_size_post_init", MIN_CLUSTER_SIZE);
-        footLength = maxY.y - minY.y;
+        footLength = sqrt(pow(maxY.y - minY.y, 2) + pow(maxY.x - minY.x, 2) + pow(maxY.z + minY.z, 2));
         init_side_done = true;
     }
 }
