@@ -302,7 +302,7 @@ float getFootHeight(Cloud leg) {
     for (int i = 0; i < cloud_normals->size(); i++) {
         double currentNormal[3] = {cloud_normals->points[i].normal_x, cloud_normals->points[i].normal_y, cloud_normals->points[i].normal_z};
         if (std::abs(cosine_similarity(legNormal, currentNormal, 3)) > 0.5) {
-          ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", leg.points[i].x, leg.points[i].y, leg.points[i].z);
+//           ROS_INFO("Point with given z_normal has X: %f, Y: %f, Z: %f", leg.points[i].x, leg.points[i].y, leg.points[i].z);
             indices.push_back(i);
         }
     }
@@ -488,38 +488,55 @@ bool init() {
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
-
+    ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
+    ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
+    ros::Time start_clustering = ros::Time::now();
     if (init_side_done) legs = splitLegs(removedGround);
+    ros::Time end_clustering = ros::Time::now();
     if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
     if (init() && !legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
         if (!left_leg.empty()) {
-            pub_left_leg.publish(left_leg);
+            transformations_left_start = ros::Time::now();
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
-            pub_left_toe.publish(left_toe);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
             Eigen::Matrix4f leftLegTrans = findLegTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
-            pub_left_heel.publish(left_heel);
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
+            transformations_left_end = ros::Time::now();
+            pub_left_leg.publish(left_leg);
+            pub_left_toe.publish(left_toe);
+            pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
         }
         if (init() && !right_leg.empty()) {
-            pub_right_leg.publish(right_leg);
+            transformations_right_end = ros::Time::now();
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
-            pub_right_toe.publish(right_toe);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
             Eigen::Matrix4f rightLegTrans = findLegTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
-            pub_right_heel.publish(right_heel);
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
+            transformations_right_start = ros::Time::now();
+            pub_right_leg.publish(right_leg);
+            pub_right_toe.publish(right_toe);
+            pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
         }
     }
+    ros::Time end = ros::Time::now();
+    double all = (end - start).toSec();
+    double clustering = (end_clustering - start_clustering).toSec();
+    double Trans_left = (transformations_left_end - transformations_left_start).toSec();
+    double Trans_right = (transformations_right_end - transformations_right_start).toSec();
+    ROS_INFO("The Callback took %f seconds", all);
+    ROS_INFO("The clustering took %f seconds", clustering);
+    ROS_INFO("The Trans_left took %f seconds", Trans_left);
+    ROS_INFO("The Trans_right took %f seconds", Trans_right);
+
 //     float success_percent = ((float) Icp_error_count /(float) (icp_count));
 //     ROS_INFO("ICP's error rate is: %f",success_percent);
 }
