@@ -10,7 +10,8 @@
     "<node name="robot_camera_transform" pkg="tf2_ros" type="static_transform_publisher" args="-0.375 0 0.77 3.14 1.1 0.0 base_link camera_link" />
     <node name="camera_optical_transform" pkg="tf2_ros" type="static_transform_publisher" args="0 -0.02 0 0 0 0 1 camera_link camera_depth_frame" />
     <node name="camera_depth_optical_frame_transform" pkg="tf2_ros" type="static_transform_publisher" args="0 0 0 -0.5 0.5 -0.5 0.5 camera_depth_frame camera_depth_optical_frame" />
-    <node pkg="camera_lower_leg_tracking" name="feet_detection" type="feet_detection_node" output="screen" />
+    
+    <node pkg="camera_lower_leg_tracking" name="feet_detection" type="feet_detection_node" output="screen">
         <param name="ground_level" value="0.025" />
         <param name="point_size_post_init" value="0.01" />
         <param name="point_size_pre_init" value="0.001" />
@@ -21,4 +22,6 @@
         <param name="init_frontal_capture_frame" value="150" />
         <param name="init_side_end_frame" value="80" />
         <param name="init_side_capture_frame" value="75" />
+        <rosparam command="load" file="$(find camera_lower_leg_tracking)/include/KalmanFilterParameters.yaml"/>
+    </node>
 </launch>

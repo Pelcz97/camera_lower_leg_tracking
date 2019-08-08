@@ -17,9 +17,17 @@ find_package(catkin REQUIRED COMPONENTS roscpp
     tf2_ros
     tf2_msgs
     tf2_sensor_msgs
-    std_msgs)
+    std_msgs
+    iirob_filters)
+    
 find_package(PCL 1.7 REQUIRED)
-include_directories(${catkin_INCLUDE_DIRS})
+
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" Cpp11CompilerFlag)
+if (Cpp11CompilerFlag)
+       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)

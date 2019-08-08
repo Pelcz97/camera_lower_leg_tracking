@@ -1,4 +1,6 @@
-#include "pcl_types.h"
+#include <pcl_types.h>
+#include <iirob_filters/kalman_filter.h>
+
 
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
@@ -11,6 +13,46 @@ bool init_front_done = false, init_side_done = false;
 
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME,  INIT_SIDE_END_FRAME;
+
+//TODO überlegen, ob das sinnvoll ist!
+// Eigen::Matrix<double, 6, 6> F;
+// Eigen::Matrix<double, 3, 6> H;
+// Eigen::Matrix<double, 3, 3> R;
+// Eigen::Matrix<double, 6, 6> Q;
+// Eigen::Matrix<double, 6, 6> P;
+// Eigen::Matrix<double, 6, 6> I;
+// Eigen::Vector3d y;
+// Eigen::Matrix<double, 6, 1> x_old;
+// Eigen::Matrix<double, 6, 1> x_new;
+// 
+// void KalmanInit(Eigen::Matrix<double, 6, 1> x_0) {
+//     P.setIdentity();
+//     I.setIdentity();
+//     H << 1, 0, 0, 0, 0, 0,
+//               0, 1, 0, 0, 0, 0,
+//               0, 0, 1, 0, 0, 0;
+//     R << 0.000001, 0, 0,
+//               0, 0.000001, 0,
+//               0, 0, 0.000001;
+//     x_old = x_0;
+// }
+// 
+// Eigen::Vector3d KalmanUpdate(Eigen::Vector3d y, double dt, Eigen::Matrix<double, 6, 6> F) {
+//     F << 1, 0, 0, dt, 0, 0, 
+//              0, 1, 0, 0, dt, 0,
+//              0, 0, 1, 0, 0, dt,
+//              0, 0, 0, 1, 0, 0,
+//              0, 0, 0, 0, 1, 0,
+//              0, 0, 0, 0, 0, 1;
+//     x_new =F *  x_old;
+//     P = F * P * F.transpose() + Q;
+//     Eigen::MatrixXd K = P * H.transpose() * (H * P * H.transpose() + R).inverse();
+//     x_new += K * (y - H * x_new);
+//     P = (I - K * H) * P;
+//     x_old = x_new;    
+//     return x_new;
+// }
+
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
 //     ROS_INFO("Tranform frame is %s und %s", transformStamped.header.frame_id.c_str(), transformStamped.child_frame_id.c_str());
@@ -345,6 +387,12 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         right_foot_reference = rightFootCropped.makeShared();
         right_leg_reference = rightLegCropped.makeShared();
         left_leg_reference = leftLegCropped.makeShared();
+        
+        geometry_msgs::PointStamped toe = findToe(rightFootCropped, false);
+        //TODO überlegen, ob das sinnvoll ist!
+//         Eigen::Vector3d heel;
+//         heel << toe.point.x - footLength, toe.point.y, toe.point.z, 0, 0, 0;
+//         KalmanInit(heel);
 
         init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
@@ -504,7 +552,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             transformations_left_start = ros::Time::now();
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
-            Eigen::Matrix4f leftLegTrans = findLegTransformation(left_leg, true);
+//             Eigen::Matrix4f leftLegTrans = findLegTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
             transformations_left_end = ros::Time::now();
@@ -514,13 +562,13 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_left_ankle.publish(left_ankle);
         }
         if (init() && !right_leg.empty()) {
-            transformations_right_end = ros::Time::now();
+            transformations_right_start = ros::Time::now();
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
-            Eigen::Matrix4f rightLegTrans = findLegTransformation(right_leg, false);
+//             Eigen::Matrix4f rightLegTrans = findLegTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
-            transformations_right_start = ros::Time::now();
+            transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
             pub_right_heel.publish(right_heel);
