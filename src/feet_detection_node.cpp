@@ -13,6 +13,9 @@ bool init_front_done = false, init_side_done = false;
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME,  INIT_SIDE_END_FRAME;
 
+KalmanFilter* kFilter_left, *kFilter_right;
+
+ros::Time previos_T_left, previos_T_right;
 
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
@@ -294,8 +297,11 @@ float getFootHeight(Cloud leg) {
         if (normalLeg.points[i].z > height) height = normalLeg.points[i].z;
     }
 
-
-    ROS_INFO("The foot is %fcm high", height);
+    if (height > 0.15) {
+      ROS_WARN("The real height of the foot could not be measured! Now 0.15m will be used as default value");
+      height = 0.15;
+    }
+    ROS_INFO("The foot is %fm high", height);
 
     return height;
 }
@@ -326,11 +332,23 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         right_leg_reference = rightLegCropped.makeShared();
         left_leg_reference = leftLegCropped.makeShared();
         
-        geometry_msgs::PointStamped toe = findToe(rightFootCropped, false);
-        //TODO überlegen, ob das sinnvoll ist!
-//         Eigen::Vector3d heel;
-//         heel << toe.point.x - footLength, toe.point.y, toe.point.z, 0, 0, 0;
-//         KalmanInit(heel);
+        geometry_msgs::PointStamped toeLeft = findToe(leftFootCropped, true);
+        geometry_msgs::PointStamped toeRight = findToe(rightFootCropped, false);
+        std::vector<double> heelLeft, heelRight;
+        heelLeft.push_back(toeLeft.point.x - footLength);
+        heelLeft.push_back(toeLeft.point.y);
+        heelLeft.push_back(toeLeft.point.z);
+        heelLeft.push_back(0);
+        heelLeft.push_back(0);
+        heelLeft.push_back(0);
+        heelRight.push_back(toeRight.point.x - footLength);
+        heelRight.push_back(toeRight.point.y);
+        heelRight.push_back(toeRight.point.z);
+        heelRight.push_back(0);
+        heelRight.push_back(0);
+        heelRight.push_back(0);
+        if (!kFilter_left->configure(heelLeft)) ROS_WARN("KalmanFilter for the left heel couldn't configure!");
+        if (!kFilter_right->configure(heelRight)) ROS_WARN("KalmanFilter for the right heel couldn't configure!");
 
         init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
@@ -408,8 +426,8 @@ void side_init(Cloud cloud) {
             if (legCropped.points[i].z < FOOT_HEIGHT && legCropped.points[i].y > maxY.y) maxY = legCropped.points[i];
             if (legCropped.points[i].z < FOOT_HEIGHT && legCropped.points[i].y < minY.y) minY = legCropped.points[i];
         }
+        ROS_INFO("The foot is %fm long", maxY.y - minY.y);
         ROS_INFO("SIDE INIT SUCCESSFUL");
-        ROS_INFO("The foot is %fcm long", maxY.y - minY.y);
         ros::param::get("point_size_post_init", POINT_SIZE);
         ros::param::get("min_cluster_size_post_init", MIN_CLUSTER_SIZE);
         footLength = sqrt(pow(maxY.y - minY.y, 2) + pow(maxY.x - minY.x, 2) + pow(maxY.z + minY.z, 2));
@@ -462,7 +480,7 @@ geometry_msgs::PointStamped findAnkle(geometry_msgs::PointStamped heel) {
     ankle.header.frame_id = "base_link";
     ankle.header.seq++;
 
-    ankle.point.x = heel.point.x + footLength/3;
+    ankle.point.x = heel.point.x + 0.055;
     ankle.point.y = heel.point.y;
     ankle.point.z = heel.point.z + FOOT_HEIGHT;
 
@@ -479,7 +497,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     Cloud removedGround = removeGround(input_cloud);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
-    ros::Time start_clustering = ros::Time::now();
+//     ros::Time start_clustering = ros::Time::now();
     if (init_side_done) legs = splitLegs(removedGround);
 //     ros::Time end_clustering = ros::Time::now();
     if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
@@ -491,6 +509,20 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
+            
+            std::vector<double> data_in_left, data_out_left;
+            data_in_left.push_back(left_heel.point.x);
+            data_in_left.push_back(left_heel.point.y);
+            data_in_left.push_back(left_heel.point.z);
+            ros::Time now_left = ros::Time::now();
+            double delta_t_left = (now_left - previos_T_left).toSec();
+            kFilter_left->update(data_in_left, data_out_left, delta_t_left, true);
+            previos_T_left = now_left;
+            
+            left_heel.point.x = data_out_left[0];
+            left_heel.point.y = data_out_left[1];
+            left_heel.point.z = data_out_left[2];
+            
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
@@ -503,6 +535,21 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
+            
+            std::vector<double> data_in_right, data_out_right;
+            data_in_right.push_back(right_heel.point.x);
+            data_in_right.push_back(right_heel.point.y);
+            data_in_right.push_back(right_heel.point.z);
+            ros::Time now_right = ros::Time::now();
+            double delta_t_right = (now_right - previos_T_right).toSec();
+            kFilter_right->update(data_in_right, data_out_right, delta_t_right, true);
+            previos_T_right = now_right;
+            
+            
+            right_heel.point.x = data_out_right[0];
+            right_heel.point.y = data_out_right[1];
+            right_heel.point.z = data_out_right[2];
+            
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
@@ -576,8 +623,9 @@ int main (int argc, char** argv) {
 
     pub_foot_strip = nh.advertise<sensor_msgs::PointCloud2>("footStrip", 1);
 
-
-
+    kFilter_left = new KalmanFilter();
+    kFilter_right = new KalmanFilter();
+    
     ros::param::get("ground_level", GND_LEVEL);
     ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
     ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
