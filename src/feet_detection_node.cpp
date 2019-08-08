@@ -1,5 +1,4 @@
 #include <pcl_types.h>
-#include <iirob_filters/kalman_filter.h>
 
 
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
@@ -14,44 +13,6 @@ bool init_front_done = false, init_side_done = false;
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME,  INIT_SIDE_END_FRAME;
 
-//TODO überlegen, ob das sinnvoll ist!
-// Eigen::Matrix<double, 6, 6> F;
-// Eigen::Matrix<double, 3, 6> H;
-// Eigen::Matrix<double, 3, 3> R;
-// Eigen::Matrix<double, 6, 6> Q;
-// Eigen::Matrix<double, 6, 6> P;
-// Eigen::Matrix<double, 6, 6> I;
-// Eigen::Vector3d y;
-// Eigen::Matrix<double, 6, 1> x_old;
-// Eigen::Matrix<double, 6, 1> x_new;
-// 
-// void KalmanInit(Eigen::Matrix<double, 6, 1> x_0) {
-//     P.setIdentity();
-//     I.setIdentity();
-//     H << 1, 0, 0, 0, 0, 0,
-//               0, 1, 0, 0, 0, 0,
-//               0, 0, 1, 0, 0, 0;
-//     R << 0.000001, 0, 0,
-//               0, 0.000001, 0,
-//               0, 0, 0.000001;
-//     x_old = x_0;
-// }
-// 
-// Eigen::Vector3d KalmanUpdate(Eigen::Vector3d y, double dt, Eigen::Matrix<double, 6, 6> F) {
-//     F << 1, 0, 0, dt, 0, 0, 
-//              0, 1, 0, 0, dt, 0,
-//              0, 0, 1, 0, 0, dt,
-//              0, 0, 0, 1, 0, 0,
-//              0, 0, 0, 0, 1, 0,
-//              0, 0, 0, 0, 0, 1;
-//     x_new =F *  x_old;
-//     P = F * P * F.transpose() + Q;
-//     Eigen::MatrixXd K = P * H.transpose() * (H * P * H.transpose() + R).inverse();
-//     x_new += K * (y - H * x_new);
-//     P = (I - K * H) * P;
-//     x_old = x_new;    
-//     return x_new;
-// }
 
 
 Cloud removeGround(sensor_msgs::PointCloud2 input_cloud) {
@@ -140,29 +101,6 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
-
-        return transformation;
-    }
-    else Icp_error_count++;
-}
-
-Eigen::Matrix4f findLegTransformation(Cloud input, int left) {
-
-    icp_count++;
-    pcl::IterativeClosestPoint<Point, Point> icp;
-    if (left) icp.setInputSource(left_leg_reference);
-    else icp.setInputSource(right_leg_reference);
-    icp.setInputTarget(input.makeShared());
-    icp.setMaximumIterations (100);
-    Cloud Final;
-    icp.align(Final);
-//     ROS_INFO("ICP has converged: %i with the score: %f", icp.hasConverged(), icp.getFitnessScore());
-    if (icp.getFitnessScore() <= ICP_FITNESS_THRESHHOLD) {
-        Eigen::Matrix4f transformation = icp.getFinalTransformation ();
-        Final.header.frame_id = "base_link";
-
-        if (left) pub_LeftLeg.publish(Final);
-        else pub_RightLeg.publish(Final);
 
         return transformation;
     }
@@ -536,54 +474,52 @@ bool init() {
 }
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
-    ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
-    ros::Time start = ros::Time::now();
+//     ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
+//     ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
     ros::Time start_clustering = ros::Time::now();
     if (init_side_done) legs = splitLegs(removedGround);
-    ros::Time end_clustering = ros::Time::now();
+//     ros::Time end_clustering = ros::Time::now();
     if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
     if (init() && !legs.empty()) {
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
         if (!left_leg.empty()) {
-            transformations_left_start = ros::Time::now();
+//             transformations_left_start = ros::Time::now();
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
-//             Eigen::Matrix4f leftLegTrans = findLegTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
-            transformations_left_end = ros::Time::now();
+//             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
             pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
         }
         if (init() && !right_leg.empty()) {
-            transformations_right_start = ros::Time::now();
+//             transformations_right_start = ros::Time::now();
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
-//             Eigen::Matrix4f rightLegTrans = findLegTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
-            transformations_right_end = ros::Time::now();
+//             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
             pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
         }
     }
-    ros::Time end = ros::Time::now();
-    double all = (end - start).toSec();
-    double clustering = (end_clustering - start_clustering).toSec();
-    double Trans_left = (transformations_left_end - transformations_left_start).toSec();
-    double Trans_right = (transformations_right_end - transformations_right_start).toSec();
-    ROS_INFO("The Callback took %f seconds", all);
-    ROS_INFO("The clustering took %f seconds", clustering);
-    ROS_INFO("The Trans_left took %f seconds", Trans_left);
-    ROS_INFO("The Trans_right took %f seconds", Trans_right);
+//     ros::Time end = ros::Time::now();
+//     double all = (end - start).toSec();
+//     double clustering = (end_clustering - start_clustering).toSec();
+//     double Trans_left = (transformations_left_end - transformations_left_start).toSec();
+//     double Trans_right = (transformations_right_end - transformations_right_start).toSec();
+//     ROS_INFO("The Callback took %f seconds", all);
+//     ROS_INFO("The clustering took %f seconds", clustering);
+//     ROS_INFO("The Trans_left took %f seconds", Trans_left);
+//     ROS_INFO("The Trans_right took %f seconds", Trans_right);
 
 //     float success_percent = ((float) Icp_error_count /(float) (icp_count));
 //     ROS_INFO("ICP's error rate is: %f",success_percent);

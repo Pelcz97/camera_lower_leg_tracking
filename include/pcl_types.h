@@ -44,6 +44,7 @@
 
 #include <std_srvs/Trigger.h>
 
+#include <iirob_filters/kalman_filter.h>
 
 typedef pcl::PointXYZRGB Point;
 
@@ -59,6 +60,8 @@ typedef Normals::ConstPtr Normals_cptr;
 typedef std::vector<int> Indices;
 typedef boost::shared_ptr<Indices> Indices_ptr;
 typedef boost::shared_ptr<Indices const> Indices_cptr;
+
+typedef iirob_filters::MultiChannelKalmanFilter<double> KalmanFilter;
 
 
 #endif//_PCL_TYPES_H
