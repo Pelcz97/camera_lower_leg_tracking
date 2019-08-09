@@ -493,7 +493,7 @@ bool init() {
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
-//     ros::Time start = ros::Time::now();
+    ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
@@ -558,12 +558,12 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_right_ankle.publish(right_ankle);
         }
     }
-//     ros::Time end = ros::Time::now();
-//     double all = (end - start).toSec();
+    ros::Time end = ros::Time::now();
+    double all = (end - start).toSec();
 //     double clustering = (end_clustering - start_clustering).toSec();
 //     double Trans_left = (transformations_left_end - transformations_left_start).toSec();
 //     double Trans_right = (transformations_right_end - transformations_right_start).toSec();
-//     ROS_INFO("The Callback took %f seconds", all);
+    ROS_INFO("The Callback took %f seconds", all);
 //     ROS_INFO("The clustering took %f seconds", clustering);
 //     ROS_INFO("The Trans_left took %f seconds", Trans_left);
 //     ROS_INFO("The Trans_right took %f seconds", Trans_right);
