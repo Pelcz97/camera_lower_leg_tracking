@@ -254,8 +254,8 @@ double cosine_similarity(double *A, double *B, unsigned int size)
     if (d_a == 0.0f || d_b == 0.0f)
     {
         throw std::logic_error(
-                "cosine similarity is not defined whenever one or both "
-                "input vectors are zero-vectors.");
+            "cosine similarity is not defined whenever one or both "
+            "input vectors are zero-vectors.");
     }
 
     return mul / (sqrt(d_a) * sqrt(d_b)) ;
@@ -291,15 +291,15 @@ float getFootHeight(Cloud leg) {
     }
     Cloud normalLeg(leg, indices);
     pub_foot_strip.publish(normalLeg);
-    
+
     float height;
     for (int i = 0; i < normalLeg.size(); i++) {
         if (normalLeg.points[i].z > height) height = normalLeg.points[i].z;
     }
 
     if (height > 0.15) {
-      ROS_WARN("The real height of the foot could not be measured! Now 0.15m will be used as default value");
-      height = 0.15;
+        ROS_WARN("The real height of the foot could not be measured! Now 0.15m will be used as default value");
+        height = 0.15;
     }
     ROS_INFO("The foot is %fm high", height);
 
@@ -331,7 +331,7 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         right_foot_reference = rightFootCropped.makeShared();
         right_leg_reference = rightLegCropped.makeShared();
         left_leg_reference = leftLegCropped.makeShared();
-        
+
         geometry_msgs::PointStamped toeLeft = findToe(leftFootCropped, true);
         geometry_msgs::PointStamped toeRight = findToe(rightFootCropped, false);
         std::vector<double> heelLeft, heelRight;
@@ -347,8 +347,6 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         heelRight.push_back(0);
         heelRight.push_back(0);
         heelRight.push_back(0);
-        if (!kFilter_left->configure(heelLeft)) ROS_WARN("KalmanFilter for the left heel couldn't configure!");
-        if (!kFilter_right->configure(heelRight)) ROS_WARN("KalmanFilter for the right heel couldn't configure!");
 
         init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
@@ -509,7 +507,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped left_toe = findToe(left_leg, true);
             Eigen::Matrix4f leftFootTrans = findFootTransformation(left_leg, true);
             geometry_msgs::PointStamped left_heel = findHeel(left_toe, leftFootTrans);
-            
+
             std::vector<double> data_in_left, data_out_left;
             data_in_left.push_back(left_heel.point.x);
             data_in_left.push_back(left_heel.point.y);
@@ -518,11 +516,17 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             double delta_t_left = (now_left - previos_T_left).toSec();
             kFilter_left->update(data_in_left, data_out_left, delta_t_left, true);
             previos_T_left = now_left;
-            
-            left_heel.point.x = data_out_left[0];
-            left_heel.point.y = data_out_left[1];
-            left_heel.point.z = data_out_left[2];
-            
+
+            if (std::pow(left_heel.point.x - data_out_left[0],2) + std::pow(left_heel.point.y - data_out_left[1],2) + std::pow(left_heel.point.z - data_out_left[2],2)>= footLength + 0.02) {
+                ROS_INFO("KalmanFilter_Left resetErrorCovAndState this iteration does not use the KalmanFilter");
+                kFilter_left->resetErrorCovAndState();
+                left_heel.point.x = data_out_left[0];
+                left_heel.point.y = data_out_left[1];
+                left_heel.point.z = data_out_left[2];
+            }
+
+
+
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
@@ -535,7 +539,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs:: PointStamped right_toe = findToe(right_leg, false);
             Eigen::Matrix4f rightFootTrans = findFootTransformation(right_leg, false);
             geometry_msgs::PointStamped right_heel = findHeel(right_toe, rightFootTrans);
-            
+
             std::vector<double> data_in_right, data_out_right;
             data_in_right.push_back(right_heel.point.x);
             data_in_right.push_back(right_heel.point.y);
@@ -544,12 +548,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             double delta_t_right = (now_right - previos_T_right).toSec();
             kFilter_right->update(data_in_right, data_out_right, delta_t_right, true);
             previos_T_right = now_right;
-            
-            
-            right_heel.point.x = data_out_right[0];
-            right_heel.point.y = data_out_right[1];
-            right_heel.point.z = data_out_right[2];
-            
+
+            if (std::pow(right_heel.point.x - data_out_right[0],2) + std::pow(right_heel.point.y - data_out_right[1],2) + std::pow(right_heel.point.z - data_out_right[2],2)>= footLength + 0.02) {
+                ROS_INFO("KalmanFilter_Right resetErrorCovAndState this iteration does not use the KalmanFilter");
+                kFilter_right->resetErrorCovAndState();
+                right_heel.point.x = data_out_right[0];
+                right_heel.point.y = data_out_right[1];
+                right_heel.point.z = data_out_right[2];
+            }
+
+
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
@@ -609,7 +617,7 @@ int main (int argc, char** argv) {
 
     pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);
     pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
-    
+
     pub_LeftLeg = nh.advertise<sensor_msgs::PointCloud2>("left_Leg_icp",1);
     pub_RightLeg = nh.advertise<sensor_msgs::PointCloud2>("right_Leg_icp",1);
 
@@ -625,7 +633,10 @@ int main (int argc, char** argv) {
 
     kFilter_left = new KalmanFilter();
     kFilter_right = new KalmanFilter();
-    
+    if (!kFilter_left->configure()) ROS_ERROR("KalmanFilter for the left heel couldn't configure!");
+    if (!kFilter_right->configure()) ROS_ERROR("KalmanFilter for the right heel couldn't configure!");
+
+
     ros::param::get("ground_level", GND_LEVEL);
     ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
     ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);

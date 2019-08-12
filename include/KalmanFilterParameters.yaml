@@ -23,7 +23,7 @@
 # default namespace, parameters are set appropriate 
 
 KalmanFilter:
-  dt: 0.5 # will not be used due to unstable processing time
+  dt: 1 # will not be used due to unstable processing time
   n: 6
   m: 3  
   dynamics: true
