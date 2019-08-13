@@ -108,7 +108,6 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
         return transformation;
     }
     else Icp_error_count++;
-    ROS_WARN("THIS TRANSFORMATION IS TRASH");
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -464,6 +463,8 @@ geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::Mat
 
     Eigen::Vector3f footVector(-footLength,0.0,0.0);
 //     std::cout << "Transformation was :\n" << footPose << std::endl;
+//     ROS_INFO ("THE Place 4,4 is %f", footPose(3,3));
+    if (footPose(3,3) == 1.0) {
     removeColumn(footPose, 3);
     removeRow(footPose, 3);
 //     std::cout << "Rotation is :\n" << footPose << std::endl;
@@ -471,6 +472,13 @@ geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::Mat
     heel.point.x = toe.point.x + heelDirection(0);
     heel.point.y = toe.point.y + heelDirection(1);
     heel.point.z = toe.point.z + heelDirection(2);
+    }
+    else {
+      ROS_WARN("COULD NOT FIND HEEL! THIS WILL BE AN INACCURATE TRANSFORMATION");
+    heel.point.x = toe.point.x + footVector(0);
+    heel.point.y = toe.point.y;
+    heel.point.z = toe.point.z;
+    }
 
     return heel;
 }
@@ -575,7 +583,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     double clustering = (end_clustering - start_clustering).toSec();
 //     double Trans_left = (transformations_left_end - transformations_left_start).toSec();
 //     double Trans_right = (transformations_right_end - transformations_right_start).toSec();
-    ROS_INFO("The Callback took %f seconds", all);
+//     ROS_INFO("The Callback took %f seconds", all);
 //     ROS_INFO("The clustering took %f seconds", clustering);
 //     ROS_INFO("The Trans_left took %f seconds", Trans_left);
 //     ROS_INFO("The Trans_right took %f seconds", Trans_right);
