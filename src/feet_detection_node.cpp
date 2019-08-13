@@ -104,10 +104,11 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
-
+        
         return transformation;
     }
     else Icp_error_count++;
+    ROS_WARN("THIS TRANSFORMATION IS TRASH");
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -341,12 +342,16 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         heelLeft.push_back(0);
         heelLeft.push_back(0);
         heelLeft.push_back(0);
+        
         heelRight.push_back(toeRight.point.x - footLength);
         heelRight.push_back(toeRight.point.y);
         heelRight.push_back(toeRight.point.z);
         heelRight.push_back(0);
         heelRight.push_back(0);
         heelRight.push_back(0);
+
+        if (!kFilter_left->configure(heelLeft)) ROS_ERROR("KalmanFilter for the left heel couldn't configure!");
+        if (!kFilter_right->configure(heelRight)) ROS_ERROR("KalmanFilter for the right heel couldn't configure!");
 
         init_front_done = true;
         ROS_INFO("FRONTAL INIT SUCCESSFUL");
@@ -358,8 +363,6 @@ void front_init(Cloud left_leg,Cloud right_leg) {
 void side_init(Cloud cloud) {
     init_side_frame++;
     if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
-        ros::param::get("point_size_pre_init", POINT_SIZE);
-        ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
         ROS_INFO("RECORDING BEGINS IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
     }
     else if (init_side_frame < INIT_SIDE_END_FRAME) {
@@ -369,8 +372,8 @@ void side_init(Cloud cloud) {
     else if (init_side_frame == INIT_SIDE_END_FRAME) {
         ROS_INFO("Processing the Side Init");
         ROS_INFO("PointCloud before filtering has: %lu data points", side_init_cloud.points.size());
-        ros::param::get("point_size_pre_init", POINT_SIZE);
-        ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
+        ros::param::get("~point_size_pre_init", POINT_SIZE);
+        ros::param::get("~min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
         pcl::VoxelGrid<Point> vg;
         Cloud_ptr cloud_filtered(new Cloud);
         vg.setInputCloud (side_init_cloud.makeShared());
@@ -426,8 +429,8 @@ void side_init(Cloud cloud) {
         }
         ROS_INFO("The foot is %fm long", maxY.y - minY.y);
         ROS_INFO("SIDE INIT SUCCESSFUL");
-        ros::param::get("point_size_post_init", POINT_SIZE);
-        ros::param::get("min_cluster_size_post_init", MIN_CLUSTER_SIZE);
+        ros::param::get("~point_size_post_init", POINT_SIZE);
+        ros::param::get("~min_cluster_size_post_init", MIN_CLUSTER_SIZE);
         footLength = sqrt(pow(maxY.y - minY.y, 2) + pow(maxY.x - minY.x, 2) + pow(maxY.z + minY.z, 2));
         init_side_done = true;
     }
@@ -493,6 +496,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
     ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
+    pub_foot_strip.publish(removedGround);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
 //     ros::Time start_clustering = ros::Time::now();
@@ -518,7 +522,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             previos_T_left = now_left;
 
             if (std::pow(left_heel.point.x - data_out_left[0],2) + std::pow(left_heel.point.y - data_out_left[1],2) + std::pow(left_heel.point.z - data_out_left[2],2)>= footLength + 0.02) {
-                ROS_INFO("KalmanFilter_Left resetErrorCovAndState this iteration does not use the KalmanFilter");
+                ROS_WARN("KalmanFilter_Left resetErrorCovAndState this iteration does not use the KalmanFilter");
                 kFilter_left->resetErrorCovAndState();
                 left_heel.point.x = data_out_left[0];
                 left_heel.point.y = data_out_left[1];
@@ -550,7 +554,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             previos_T_right = now_right;
 
             if (std::pow(right_heel.point.x - data_out_right[0],2) + std::pow(right_heel.point.y - data_out_right[1],2) + std::pow(right_heel.point.z - data_out_right[2],2)>= footLength + 0.02) {
-                ROS_INFO("KalmanFilter_Right resetErrorCovAndState this iteration does not use the KalmanFilter");
+                ROS_WARN("KalmanFilter_Right resetErrorCovAndState this iteration does not use the KalmanFilter");
                 kFilter_right->resetErrorCovAndState();
                 right_heel.point.x = data_out_right[0];
                 right_heel.point.y = data_out_right[1];
@@ -633,18 +637,16 @@ int main (int argc, char** argv) {
 
     kFilter_left = new KalmanFilter();
     kFilter_right = new KalmanFilter();
-    if (!kFilter_left->configure()) ROS_ERROR("KalmanFilter for the left heel couldn't configure!");
-    if (!kFilter_right->configure()) ROS_ERROR("KalmanFilter for the right heel couldn't configure!");
 
 
-    ros::param::get("ground_level", GND_LEVEL);
-    ros::param::get("min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
-    ros::param::get("cluster_tolerance", CLUSTER_TOLERANCE);
-    ros::param::get("point_size_pre_init", POINT_SIZE);
-    ros::param::get("icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
-    ros::param::get("init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
-    ros::param::get("init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
-    ros::param::get("init_side_end_frame", INIT_SIDE_END_FRAME);
+    ros::param::get("~ground_level", GND_LEVEL);
+    ros::param::get("~min_cluster_size_pre_init", MIN_CLUSTER_SIZE);
+    ros::param::get("~cluster_tolerance", CLUSTER_TOLERANCE);
+    ros::param::get("~point_size_pre_init", POINT_SIZE);
+    ros::param::get("~icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
+    ros::param::get("~init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
+    ros::param::get("~init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
+    ros::param::get("~init_side_end_frame", INIT_SIDE_END_FRAME);
 
     // Spin
     ros::spin();
