@@ -4,7 +4,7 @@
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg, pub_left_foot_axis, pub_right_foot_axis;
 geometry_msgs::PointStamped oldLeft,oldRight;
 Cloud_ptr right_foot_reference, left_foot_reference, right_leg_reference, left_leg_reference;
 Cloud side_init_cloud;
@@ -65,9 +65,9 @@ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
         }
         Indices inds;
         for (int i = 0; i < input_cloud.size(); i++) {
-          if  ((input_cloud.points[i].x + 0.02) >= maxX.point.x) {
-            inds.push_back(i);  
-          }
+            if  ((input_cloud.points[i].x + 0.02) >= maxX.point.x) {
+                inds.push_back(i);
+            }
         }
         Cloud frontalPoints(input_cloud, inds);
         Point centroid;
@@ -97,6 +97,32 @@ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
     return maxX;
 }
 
+pcl::ModelCoefficients findLegAxis(Cloud input) {
+    pcl::ModelCoefficients::Ptr modelCoefficients (new pcl::ModelCoefficients);
+    pcl::NormalEstimation<Point, pcl::Normal> ne;
+    pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+    pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point> ());
+    ne.setSearchMethod (tree);
+    ne.setInputCloud (input.makeShared());
+    ne.setKSearch (50);
+    ne.compute (*cloud_normals);
+
+    pcl::SACSegmentationFromNormals<Point, pcl::Normal> seg;
+    pcl::PointIndices::Ptr inliers_cylinder (new pcl::PointIndices);
+    seg.setOptimizeCoefficients (true);
+    seg.setModelType (pcl::SACMODEL_CYLINDER);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setNormalDistanceWeight (0.1);
+    seg.setMaxIterations (10000);
+    seg.setDistanceThreshold (0.1);
+    seg.setRadiusLimits (0, 0.1);
+    seg.setInputCloud (input.makeShared());
+    seg.setInputNormals (cloud_normals);
+    seg.segment (*inliers_cylinder, *modelCoefficients);
+
+    return *modelCoefficients;
+}
+
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
     icp_count++;
@@ -114,7 +140,7 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         if (left) pub_LeftFoot.publish(Final);
         else pub_RightFoot.publish(Final);
-        
+
         return transformation;
     }
     else Icp_error_count++;
@@ -351,7 +377,7 @@ void front_init(Cloud left_leg,Cloud right_leg) {
         heelLeft.push_back(0);
         heelLeft.push_back(0);
         heelLeft.push_back(0);
-        
+
         heelRight.push_back(toeRight.point.x - footLength);
         heelRight.push_back(toeRight.point.y);
         heelRight.push_back(toeRight.point.z);
@@ -475,19 +501,19 @@ geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::Mat
 //     std::cout << "Transformation was :\n" << footPose << std::endl;
 //     ROS_INFO ("THE Place 4,4 is %f", footPose(3,3));
     if (footPose(3,3) == 1.0) {
-    removeColumn(footPose, 3);
-    removeRow(footPose, 3);
+        removeColumn(footPose, 3);
+        removeRow(footPose, 3);
 //     std::cout << "Rotation is :\n" << footPose << std::endl;
-    Eigen::Vector3f heelDirection = footPose * footVector;
-    heel.point.x = toe.point.x + heelDirection(0);
-    heel.point.y = toe.point.y + heelDirection(1);
-    heel.point.z = toe.point.z + heelDirection(2);
+        Eigen::Vector3f heelDirection = footPose * footVector;
+        heel.point.x = toe.point.x + heelDirection(0);
+        heel.point.y = toe.point.y + heelDirection(1);
+        heel.point.z = toe.point.z + heelDirection(2);
     }
     else {
-      ROS_WARN("COULD NOT FIND HEEL! THIS WILL BE AN INACCURATE TRANSFORMATION");
-    heel.point.x = toe.point.x + footVector(0);
-    heel.point.y = toe.point.y;
-    heel.point.z = toe.point.z;
+        ROS_WARN("COULD NOT FIND HEEL! THIS WILL BE AN INACCURATE TRANSFORMATION");
+        heel.point.x = toe.point.x + footVector(0);
+        heel.point.y = toe.point.y;
+        heel.point.z = toe.point.z;
     }
 
     return heel;
@@ -550,11 +576,37 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
+            pcl::ModelCoefficients leg_coefficients = findLegAxis(left_leg);
+//            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
+
+            geometry_msgs::Point end;
+            end.x = left_ankle.point.x + std::abs(leg_coefficients.values[3]);
+            end.y = left_ankle.point.y + std::abs(leg_coefficients.values[4]);
+            end.z = left_ankle.point.z + std::abs(leg_coefficients.values[5]);
+
+
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = "base_link";
+            marker.header.stamp = ros::Time();
+            marker.id = 0;
+            marker.type = visualization_msgs::Marker::ARROW;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.points.push_back(left_ankle.point);
+            marker.points.push_back(end);
+            marker.scale.x = 0.3;
+            marker.scale.y = 0.01;
+            marker.scale.z = 0.02;
+            marker.color.a = 1.0; // Don't forget to set the alpha!
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
             pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
+            pub_left_foot_axis.publish(marker);
         }
         if (init() && !right_leg.empty()) {
 //             transformations_right_start = ros::Time::now();
@@ -581,11 +633,38 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
+            pcl::ModelCoefficients leg_coefficients = findLegAxis(right_leg);
+//             ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
+
+
+            geometry_msgs::Point end;
+            end.x = right_ankle.point.x + std::abs(leg_coefficients.values[3]);
+            end.y = right_ankle.point.y + std::abs(leg_coefficients.values[4]);
+            end.z = right_ankle.point.z + std::abs(leg_coefficients.values[5]);
+
+
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = "base_link";
+            marker.header.stamp = ros::Time();
+            marker.id = 0;
+            marker.type = visualization_msgs::Marker::ARROW;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.points.push_back(right_ankle.point);
+            marker.points.push_back(end);
+            marker.scale.x = 0.3;
+            marker.scale.y = 0.01;
+            marker.scale.z = 0.02;
+            marker.color.a = 1.0; // Don't forget to set the alpha!
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
             pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
+            pub_right_foot_axis.publish(marker);
         }
     }
 //     ros::Time end = ros::Time::now();
@@ -648,6 +727,9 @@ int main (int argc, char** argv) {
 
     pub_left_ankle = nh.advertise<geometry_msgs::PointStamped>("left_ankle", 1);
     pub_right_ankle = nh.advertise<geometry_msgs::PointStamped>("right_ankle", 1);
+
+    pub_left_foot_axis =nh.advertise<visualization_msgs::Marker>( "left_foot_axis", 1 );
+    pub_right_foot_axis = nh.advertise<visualization_msgs::Marker>( "right_foot_axis", 1 );
 
     ros::ServiceServer service = nh.advertiseService("camera_lower_leg_tracking/init_reset", init_reset);
 
