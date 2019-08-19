@@ -153,8 +153,8 @@ include_directories(
 add_executable(feet_detection_node src/feet_detection_node.cpp)
 target_link_libraries(feet_detection_node ${catkin_LIBRARIES})
 
-# add_executable(toe_detection_node src/toe_detection_node.cpp)
-# target_link_libraries(toe_detection_node ${catkin_LIBRARIES})
+add_executable(toe_detection_node src/toe_detection_node.cpp)
+target_link_libraries(toe_detection_node ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

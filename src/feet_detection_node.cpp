@@ -55,7 +55,7 @@ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
         maxX.point.y = input_cloud.points[0].y;
         maxX.point.z = input_cloud.points[0].z;
 
-        for( size_t i = 0; i < input_cloud.size(); i++ ) {
+        for(size_t i = 0; i < input_cloud.size(); i++ ) {
             float X = input_cloud.points[i].x;
             if( X > maxX.point.x) {
                 maxX.point.x = input_cloud.points[i].x;
@@ -63,6 +63,16 @@ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
                 maxX.point.z = input_cloud.points[i].z;
             }
         }
+        Indices inds;
+        for (int i = 0; i < input_cloud.size(); i++) {
+          if  ((input_cloud.points[i].x + 0.02) >= maxX.point.x) {
+            inds.push_back(i);  
+          }
+        }
+        Cloud frontalPoints(input_cloud, inds);
+        Point centroid;
+        pcl::computeCentroid(frontalPoints, centroid);
+        maxX.point.y = centroid.y;
     }
     geometry_msgs::PointStamped oldPoint;
     if (left) {
@@ -502,9 +512,9 @@ bool init() {
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
-    ros::Time start = ros::Time::now();
+//     ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
-    pub_foot_strip.publish(removedGround);
+//     pub_foot_strip.publish(removedGround);
     if (!removedGround.empty() && !init_side_done) side_init(removedGround);
     std::vector<Cloud> legs;
 //     ros::Time start_clustering = ros::Time::now();
@@ -578,8 +588,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_right_ankle.publish(right_ankle);
         }
     }
-    ros::Time end = ros::Time::now();
-    double all = (end - start).toSec();
+//     ros::Time end = ros::Time::now();
+//     double all = (end - start).toSec();
 //     double clustering = (end_clustering - start_clustering).toSec();
 //     double Trans_left = (transformations_left_end - transformations_left_start).toSec();
 //     double Trans_right = (transformations_right_end - transformations_right_start).toSec();
