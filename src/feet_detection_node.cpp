@@ -102,23 +102,38 @@ pcl::ModelCoefficients findLegAxis(Cloud input) {
     pcl::NormalEstimation<Point, pcl::Normal> ne;
     pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
     pcl::search::KdTree<Point>::Ptr tree (new pcl::search::KdTree<Point> ());
-    ne.setSearchMethod (tree);
-    ne.setInputCloud (input.makeShared());
-    ne.setKSearch (50);
-    ne.compute (*cloud_normals);
 
-    pcl::SACSegmentationFromNormals<Point, pcl::Normal> seg;
-    pcl::PointIndices::Ptr inliers_cylinder (new pcl::PointIndices);
-    seg.setOptimizeCoefficients (true);
-    seg.setModelType (pcl::SACMODEL_CYLINDER);
-    seg.setMethodType (pcl::SAC_RANSAC);
-    seg.setNormalDistanceWeight (0.1);
-    seg.setMaxIterations (10000);
-    seg.setDistanceThreshold (0.1);
-    seg.setRadiusLimits (0, 0.1);
-    seg.setInputCloud (input.makeShared());
-    seg.setInputNormals (cloud_normals);
-    seg.segment (*inliers_cylinder, *modelCoefficients);
+    Indices inds;
+    float maxZ= 0;
+    for (int i = 0; i < input.size(); i++) {
+        if (input.points[i].z >= FOOT_HEIGHT) inds.push_back(i);
+        if (input.points[i].z > maxZ) maxZ= input.points[i].z;
+    }
+    Cloud lowerLeg(input, inds);
+
+
+    if (maxZ >= FOOT_HEIGHT + 0.05) {
+        ne.setSearchMethod (tree);
+        ne.setInputCloud (lowerLeg.makeShared());
+        ne.setKSearch (50);
+        ne.compute (*cloud_normals);
+
+        pcl::SACSegmentationFromNormals<Point, pcl::Normal> seg;
+        pcl::PointIndices::Ptr inliers_cylinder (new pcl::PointIndices);
+        seg.setOptimizeCoefficients (true);
+        seg.setModelType (pcl::SACMODEL_CYLINDER);
+        seg.setMethodType (pcl::SAC_RANSAC);
+        seg.setNormalDistanceWeight (0.1);
+        seg.setMaxIterations (1000);
+        seg.setDistanceThreshold (0.1);
+        seg.setRadiusLimits (0, 0.1);
+        seg.setInputCloud (lowerLeg.makeShared());
+        seg.setInputNormals (cloud_normals);
+        seg.segment (*inliers_cylinder, *modelCoefficients);
+    }
+    else {
+        ROS_WARN("NOT ENOUGH OF THE LOWER LEG IN THE FRAME");
+    }
 
     return *modelCoefficients;
 }
@@ -578,29 +593,28 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
             pcl::ModelCoefficients leg_coefficients = findLegAxis(left_leg);
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
-
-            geometry_msgs::Point end;
-            end.x = left_ankle.point.x + std::abs(leg_coefficients.values[3]);
-            end.y = left_ankle.point.y + std::abs(leg_coefficients.values[4]);
-            end.z = left_ankle.point.z + std::abs(leg_coefficients.values[5]);
-
-
             visualization_msgs::Marker marker;
             marker.header.frame_id = "base_link";
             marker.header.stamp = ros::Time();
-            marker.id = 0;
             marker.type = visualization_msgs::Marker::ARROW;
             marker.action = visualization_msgs::Marker::ADD;
-            marker.points.push_back(left_ankle.point);
-            marker.points.push_back(end);
-            marker.scale.x = 0.3;
-            marker.scale.y = 0.01;
-            marker.scale.z = 0.02;
-            marker.color.a = 1.0; // Don't forget to set the alpha!
-            marker.color.r = 0.0;
-            marker.color.g = 1.0;
-            marker.color.b = 0.0;
 
+            if (leg_coefficients.values.size() == 7) {
+                geometry_msgs::Point end;
+                end.x = left_ankle.point.x + std::abs(leg_coefficients.values[3]);
+                end.y = left_ankle.point.y + std::abs(leg_coefficients.values[4]);
+                end.z = left_ankle.point.z + std::abs(leg_coefficients.values[5]);
+                marker.points.push_back(left_ankle.point);
+                marker.points.push_back(end);
+                marker.scale.x = 0.02;
+                marker.scale.y = 0.03;
+                marker.scale.z = 0.02;
+                marker.color.a = 1.0; // Don't forget to set the alpha!
+                marker.color.r = 0.0;
+                marker.color.g = 1.0;
+                marker.color.b = 0.0;
+            } else ROS_INFO("MARKER NOT PUBLISHED");
+            
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
@@ -635,29 +649,31 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
             pcl::ModelCoefficients leg_coefficients = findLegAxis(right_leg);
 //             ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
-
-
-            geometry_msgs::Point end;
-            end.x = right_ankle.point.x + std::abs(leg_coefficients.values[3]);
-            end.y = right_ankle.point.y + std::abs(leg_coefficients.values[4]);
-            end.z = right_ankle.point.z + std::abs(leg_coefficients.values[5]);
-
-
             visualization_msgs::Marker marker;
             marker.header.frame_id = "base_link";
             marker.header.stamp = ros::Time();
-            marker.id = 0;
             marker.type = visualization_msgs::Marker::ARROW;
             marker.action = visualization_msgs::Marker::ADD;
-            marker.points.push_back(right_ankle.point);
-            marker.points.push_back(end);
-            marker.scale.x = 0.3;
-            marker.scale.y = 0.01;
-            marker.scale.z = 0.02;
-            marker.color.a = 1.0; // Don't forget to set the alpha!
-            marker.color.r = 0.0;
-            marker.color.g = 1.0;
-            marker.color.b = 0.0;
+
+            if (leg_coefficients.values.size() == 7) {
+
+                geometry_msgs::Point end;
+                end.x = right_ankle.point.x + std::abs(leg_coefficients.values[3]);
+                end.y = right_ankle.point.y + std::abs(leg_coefficients.values[4]);
+                end.z = right_ankle.point.z + std::abs(leg_coefficients.values[5]);
+
+
+
+                marker.points.push_back(right_ankle.point);
+                marker.points.push_back(end);
+                marker.scale.x = 0.02;
+                marker.scale.y = 0.03;
+                marker.scale.z = 0.02;
+                marker.color.a = 1.0; // Don't forget to set the alpha!
+                marker.color.r = 0.0;
+                marker.color.g = 1.0;
+                marker.color.b = 0.0;
+            } else ROS_INFO("MARKER NOT PUBLISHED");
 
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
