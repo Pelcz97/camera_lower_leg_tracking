@@ -203,6 +203,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
 
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
+    ros::Time start = ros::Time::now();
     Cloud removedGround = removeGround(input_cloud);
     std::vector<Cloud> legs = splitLegs(removedGround);
     if (legs.size() == 2) {
@@ -228,6 +229,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         }
 //         ROS_INFO("The average distance in the LEFT toe is %fm", addedDistancesLeft/iterations);
 //         ROS_INFO("The average distance in the RIGHT toe is %fm", addedDistancesRight/iterations);
+    ros::Time end = ros::Time::now();
+    ROS_INFO("THIS CALLBACK TOOK %f SECONDS", (end - start).toSec());
 
     }
 }
