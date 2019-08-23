@@ -99,7 +99,8 @@ geometry_msgs:: PointStamped findToe(Cloud input_cloud, int left) {
     return maxX;
 }
 
-pcl::ModelCoefficients findLegAxis(Cloud input) {
+std::vector<float> findLegAxis(Cloud input, bool left) {
+    std::vector<float> axis;
     pcl::ModelCoefficients::Ptr modelCoefficients (new pcl::ModelCoefficients);
     pcl::NormalEstimation<Point, pcl::Normal> ne;
     pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
@@ -114,7 +115,7 @@ pcl::ModelCoefficients findLegAxis(Cloud input) {
     Cloud lowerLeg(input, inds);
 
 
-    if (maxZ >= FOOT_HEIGHT + 0.075) {
+    if (maxZ >= 0.2) {
         ne.setSearchMethod (tree);
         ne.setInputCloud (lowerLeg.makeShared());
         ne.setKSearch (50);
@@ -132,12 +133,29 @@ pcl::ModelCoefficients findLegAxis(Cloud input) {
         seg.setInputCloud (lowerLeg.makeShared());
         seg.setInputNormals (cloud_normals);
         seg.segment (*inliers_cylinder, *modelCoefficients);
+        if (modelCoefficients->values.size() == 7) {
+            axis.push_back(modelCoefficients->values[3]);
+            axis.push_back(modelCoefficients->values[4]);
+            axis.push_back(modelCoefficients->values[5]);
+            axis.push_back(0.0);
+        }
     }
     else {
-        ROS_WARN("NOT ENOUGH OF THE LOWER LEG IN THE FRAME");
+        ROS_INFO("USING LASERSCANNERDATA");
+        if (left) {
+            axis.push_back(laserscanner_fst_leg_x);
+            axis.push_back(laserscanner_fst_leg_y);
+            axis.push_back(laserscanner_z);
+        }
+        else {
+            axis.push_back(laserscanner_snd_leg_x);
+            axis.push_back(laserscanner_snd_leg_y);
+            axis.push_back(laserscanner_z);
+        }
+        axis.push_back(1.0);
     }
 
-    return *modelCoefficients;
+    return axis;
 }
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
@@ -593,11 +611,11 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
-            pcl::ModelCoefficients leg_coefficients = findLegAxis(left_leg);
+            std::vector<float> leg_coefficients = findLegAxis(left_leg, true);
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
 
 
-            if (leg_coefficients.values.size() == 7) {
+            if (leg_coefficients.size() == 4) {
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "base_link";
                 marker.header.stamp = ros::Time::now();
@@ -605,9 +623,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.type = visualization_msgs::Marker::ARROW;
                 marker.action = visualization_msgs::Marker::ADD;
                 geometry_msgs::Point end;
-                end.x = left_ankle.point.x + std::abs(leg_coefficients.values[3]);
-                end.y = left_ankle.point.y + std::abs(leg_coefficients.values[4]);
-                end.z = left_ankle.point.z + std::abs(leg_coefficients.values[5]);
+                if (leg_coefficients[3] == 0.0) {
+                    end.x = left_ankle.point.x + std::abs(leg_coefficients[0]);
+                    end.y = left_ankle.point.y + std::abs(leg_coefficients[1]);
+                    end.z = left_ankle.point.z + std::abs(leg_coefficients[2]);
+                }
+                else {
+                    end.x = leg_coefficients[0];
+                    end.y = leg_coefficients[1];
+                    end.z = leg_coefficients[2];
+                }
                 marker.points.push_back(left_ankle.point);
                 marker.points.push_back(end);
                 marker.scale.x = 0.02;
@@ -652,10 +677,10 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
-            pcl::ModelCoefficients leg_coefficients = findLegAxis(right_leg);
+            std::vector<float> leg_coefficients = findLegAxis(right_leg, false);
 //             ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
 
-            if (leg_coefficients.values.size() == 7) {
+            if (leg_coefficients.size() == 4) {
 
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "base_link";
@@ -664,11 +689,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.type = visualization_msgs::Marker::ARROW;
                 marker.action = visualization_msgs::Marker::ADD;
                 geometry_msgs::Point end;
-                end.x = right_ankle.point.x + std::abs(leg_coefficients.values[3]);
-                end.y = right_ankle.point.y + std::abs(leg_coefficients.values[4]);
-                end.z = right_ankle.point.z + std::abs(leg_coefficients.values[5]);
-
-
+                if (leg_coefficients[3] == 0.0) {
+                    end.x = right_ankle.point.x + std::abs(leg_coefficients[0]);
+                    end.y = right_ankle.point.y + std::abs(leg_coefficients[1]);
+                    end.z = right_ankle.point.z + std::abs(leg_coefficients[2]);
+                }
+                else {
+                    end.x = leg_coefficients[0];
+                    end.y = leg_coefficients[1];
+                    end.z = leg_coefficients[2];
+                }
 
                 marker.points.push_back(right_ankle.point);
                 marker.points.push_back(end);
@@ -713,7 +743,6 @@ void laserscanner_snd_leg_cb(std_msgs::Float64MultiArray input) {
     ROS_INFO("DATA FROM SND LEG CAME IN");
     laserscanner_snd_leg_x = input.data[0];
     laserscanner_snd_leg_y = input.data[1];
-
 }
 
 
