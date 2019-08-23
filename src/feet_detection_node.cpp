@@ -13,6 +13,8 @@ bool init_front_done = false, init_side_done = false;
 float GND_LEVEL, ICP_FITNESS_THRESHHOLD, CLUSTER_TOLERANCE, POINT_SIZE, FOOT_HEIGHT, footLength;
 int MIN_CLUSTER_SIZE, INIT_FRONTAL_CAPTURE_FRAME, INIT_SIDE_CAPTURE_FRAME,  INIT_SIDE_END_FRAME;
 
+float laserscanner_fst_leg_x, laserscanner_fst_leg_y, laserscanner_snd_leg_x, laserscanner_snd_leg_y, laserscanner_z = 0.2;
+
 KalmanFilter* kFilter_left, *kFilter_right;
 
 ros::Time previos_T_left, previos_T_right;
@@ -112,7 +114,7 @@ pcl::ModelCoefficients findLegAxis(Cloud input) {
     Cloud lowerLeg(input, inds);
 
 
-    if (maxZ >= FOOT_HEIGHT + 0.05) {
+    if (maxZ >= FOOT_HEIGHT + 0.075) {
         ne.setSearchMethod (tree);
         ne.setInputCloud (lowerLeg.makeShared());
         ne.setKSearch (50);
@@ -593,13 +595,15 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel);
             pcl::ModelCoefficients leg_coefficients = findLegAxis(left_leg);
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
-            visualization_msgs::Marker marker;
-            marker.header.frame_id = "base_link";
-            marker.header.stamp = ros::Time();
-            marker.type = visualization_msgs::Marker::ARROW;
-            marker.action = visualization_msgs::Marker::ADD;
+
 
             if (leg_coefficients.values.size() == 7) {
+                visualization_msgs::Marker marker;
+                marker.header.frame_id = "base_link";
+                marker.header.stamp = ros::Time::now();
+                marker.id = 0;
+                marker.type = visualization_msgs::Marker::ARROW;
+                marker.action = visualization_msgs::Marker::ADD;
                 geometry_msgs::Point end;
                 end.x = left_ankle.point.x + std::abs(leg_coefficients.values[3]);
                 end.y = left_ankle.point.y + std::abs(leg_coefficients.values[4]);
@@ -613,14 +617,15 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.color.r = 0.0;
                 marker.color.g = 1.0;
                 marker.color.b = 0.0;
-            } else ROS_INFO("MARKER NOT PUBLISHED");
-            
+                pub_left_foot_axis.publish(marker);
+
+
+            }
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
             pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
-            pub_left_foot_axis.publish(marker);
         }
         if (init() && !right_leg.empty()) {
 //             transformations_right_start = ros::Time::now();
@@ -649,14 +654,15 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel);
             pcl::ModelCoefficients leg_coefficients = findLegAxis(right_leg);
 //             ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
-            visualization_msgs::Marker marker;
-            marker.header.frame_id = "base_link";
-            marker.header.stamp = ros::Time();
-            marker.type = visualization_msgs::Marker::ARROW;
-            marker.action = visualization_msgs::Marker::ADD;
 
             if (leg_coefficients.values.size() == 7) {
 
+                visualization_msgs::Marker marker;
+                marker.header.frame_id = "base_link";
+                marker.header.stamp = ros::Time::now();
+                marker.id = 1;
+                marker.type = visualization_msgs::Marker::ARROW;
+                marker.action = visualization_msgs::Marker::ADD;
                 geometry_msgs::Point end;
                 end.x = right_ankle.point.x + std::abs(leg_coefficients.values[3]);
                 end.y = right_ankle.point.y + std::abs(leg_coefficients.values[4]);
@@ -673,14 +679,13 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.color.r = 0.0;
                 marker.color.g = 1.0;
                 marker.color.b = 0.0;
-            } else ROS_INFO("MARKER NOT PUBLISHED");
-
+                pub_right_foot_axis.publish(marker);
+            }
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
             pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
-            pub_right_foot_axis.publish(marker);
         }
     }
 //     ros::Time end = ros::Time::now();
@@ -695,6 +700,20 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 //     float success_percent = ((float) Icp_error_count /(float) (icp_count));
 //     ROS_INFO("ICP's error rate is: %f",success_percent);
+}
+
+
+void laserscanner_fst_leg_cb(std_msgs::Float64MultiArray input) {
+    ROS_INFO("DATA FROM FST LEG CAME IN");
+    laserscanner_fst_leg_x = input.data[0];
+    laserscanner_fst_leg_y = input.data[1];
+}
+
+void laserscanner_snd_leg_cb(std_msgs::Float64MultiArray input) {
+    ROS_INFO("DATA FROM SND LEG CAME IN");
+    laserscanner_snd_leg_x = input.data[0];
+    laserscanner_snd_leg_y = input.data[1];
+
 }
 
 
@@ -724,7 +743,10 @@ int main (int argc, char** argv) {
     }
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber sub_camera_image = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber laserscanner_fst_leg = nh.subscribe ("/leg_detection/pos_vel_acc_fst_leg", 1, laserscanner_fst_leg_cb);
+    ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
+
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
