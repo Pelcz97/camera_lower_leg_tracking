@@ -769,7 +769,7 @@ int main (int argc, char** argv) {
     }
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub_camera_image = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber sub_camera_image = nh.subscribe ("/camera_legs/depth_registered/points", 1, cloud_cb);
     ros::Subscriber laserscanner_fst_leg = nh.subscribe ("/leg_detection/pos_vel_acc_fst_leg", 1, laserscanner_fst_leg_cb);
     ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
 
