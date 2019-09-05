@@ -774,26 +774,26 @@ int main (int argc, char** argv) {
     ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
 
 
-    pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
-    pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
+    pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/left_leg", 1);
+    pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/right_leg", 1);
 
-    pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
-    pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
+    pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("/camera_lower_leg_tracking/left_toe", 1);
+    pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("camera_lower_leg_tracking/right_toe", 1);
 
-    pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("left_Foot",1);
-    pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("right_Foot",1);
+    pub_LeftFoot = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/left_Foot",1);
+    pub_RightFoot = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/right_Foot",1);
 
-    pub_LeftLeg = nh.advertise<sensor_msgs::PointCloud2>("left_Leg_icp",1);
-    pub_RightLeg = nh.advertise<sensor_msgs::PointCloud2>("right_Leg_icp",1);
+    pub_LeftLeg = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/left_Leg_icp",1);
+    pub_RightLeg = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/right_Leg_icp",1);
 
-    pub_left_heel = nh.advertise<geometry_msgs::PointStamped>("left_heel", 1);
-    pub_right_heel = nh.advertise<geometry_msgs::PointStamped>("right_heel", 1);
+    pub_left_heel = nh.advertise<geometry_msgs::PointStamped>("/camera_lower_leg_tracking/left_heel", 1);
+    pub_right_heel = nh.advertise<geometry_msgs::PointStamped>("/camera_lower_leg_tracking/right_heel", 1);
 
-    pub_left_ankle = nh.advertise<geometry_msgs::PointStamped>("left_ankle", 1);
-    pub_right_ankle = nh.advertise<geometry_msgs::PointStamped>("right_ankle", 1);
+    pub_left_ankle = nh.advertise<geometry_msgs::PointStamped>("/camera_lower_leg_tracking/left_ankle", 1);
+    pub_right_ankle = nh.advertise<geometry_msgs::PointStamped>("/camera_lower_leg_tracking/right_ankle", 1);
 
-    pub_left_foot_axis =nh.advertise<visualization_msgs::Marker>( "left_foot_axis", 1 );
-    pub_right_foot_axis = nh.advertise<visualization_msgs::Marker>( "right_foot_axis", 1 );
+    pub_left_foot_axis =nh.advertise<visualization_msgs::Marker>( "/camera_lower_leg_tracking/left_foot_axis", 1 );
+    pub_right_foot_axis = nh.advertise<visualization_msgs::Marker>( "/camera_lower_leg_tracking/right_foot_axis", 1 );
 
     ros::ServiceServer service = nh.advertiseService("camera_lower_leg_tracking/init_reset", init_reset);
 
