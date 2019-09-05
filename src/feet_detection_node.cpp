@@ -4,7 +4,7 @@
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg, pub_left_foot_axis, pub_right_foot_axis;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg, pub_left_foot_axis, pub_right_foot_axis, pub_right_laserscanner, pub_left_laserscanner;
 geometry_msgs::PointStamped oldLeft,oldRight;
 Cloud_ptr right_foot_reference, left_foot_reference, right_leg_reference, left_leg_reference;
 Cloud side_init_cloud;
@@ -115,7 +115,7 @@ std::vector<float> findLegAxis(Cloud input, bool left) {
     Cloud lowerLeg(input, inds);
 
 
-    if (maxZ >= 0.2) {
+    if (maxZ >= FOOT_HEIGHT + 0.1 && lowerLeg.size() > 300) {
         ne.setSearchMethod (tree);
         ne.setInputCloud (lowerLeg.makeShared());
         ne.setKSearch (50);
@@ -127,8 +127,10 @@ std::vector<float> findLegAxis(Cloud input, bool left) {
         seg.setModelType (pcl::SACMODEL_CYLINDER);
         seg.setMethodType (pcl::SAC_RANSAC);
         seg.setNormalDistanceWeight (0.1);
+        Eigen::Vector3f zAxis(0.0, 0.0, 1.0);
+        seg.setAxis(zAxis);
         seg.setMaxIterations (1000);
-        seg.setDistanceThreshold (0.1);
+        seg.setDistanceThreshold (0.01);
         seg.setRadiusLimits (0, 0.1);
         seg.setInputCloud (lowerLeg.makeShared());
         seg.setInputNormals (cloud_normals);
@@ -137,25 +139,9 @@ std::vector<float> findLegAxis(Cloud input, bool left) {
             axis.push_back(modelCoefficients->values[3]);
             axis.push_back(modelCoefficients->values[4]);
             axis.push_back(modelCoefficients->values[5]);
-            axis.push_back(0.0);
         }
+        return axis;
     }
-    else {
-        ROS_INFO("USING LASERSCANNERDATA");
-        if (left) {
-            axis.push_back(laserscanner_fst_leg_x);
-            axis.push_back(laserscanner_fst_leg_y);
-            axis.push_back(laserscanner_z);
-        }
-        else {
-            axis.push_back(laserscanner_snd_leg_x);
-            axis.push_back(laserscanner_snd_leg_y);
-            axis.push_back(laserscanner_z);
-        }
-        axis.push_back(1.0);
-    }
-
-    return axis;
 }
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
@@ -615,7 +601,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
 
 
-            if (leg_coefficients.size() == 4) {
+            if (leg_coefficients.size() == 3) {
                 visualization_msgs::Marker marker;
                 marker.header.frame_id = "base_link";
                 marker.header.stamp = ros::Time::now();
@@ -623,16 +609,9 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.type = visualization_msgs::Marker::ARROW;
                 marker.action = visualization_msgs::Marker::ADD;
                 geometry_msgs::Point end;
-                if (leg_coefficients[3] == 0.0) {
-                    end.x = left_ankle.point.x + std::abs(leg_coefficients[0]);
-                    end.y = left_ankle.point.y + std::abs(leg_coefficients[1]);
-                    end.z = left_ankle.point.z + std::abs(leg_coefficients[2]);
-                }
-                else {
-                    end.x = leg_coefficients[0];
-                    end.y = leg_coefficients[1];
-                    end.z = leg_coefficients[2];
-                }
+                end.x = left_ankle.point.x + std::abs(leg_coefficients[0]);
+                end.y = left_ankle.point.y + std::abs(leg_coefficients[1]);
+                end.z = left_ankle.point.z + std::abs(leg_coefficients[2]);
                 marker.points.push_back(left_ankle.point);
                 marker.points.push_back(end);
                 marker.scale.x = 0.02;
@@ -642,7 +621,9 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 marker.color.r = 0.0;
                 marker.color.g = 1.0;
                 marker.color.b = 0.0;
+
                 pub_left_foot_axis.publish(marker);
+
 
 
             }
@@ -734,15 +715,31 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 
 void laserscanner_fst_leg_cb(std_msgs::Float64MultiArray input) {
-    ROS_INFO("DATA FROM FST LEG CAME IN");
+//     ROS_INFO("DATA FROM FST LEG CAME IN");
     laserscanner_fst_leg_x = input.data[0];
     laserscanner_fst_leg_y = input.data[1];
+    geometry_msgs::PointStamped point;
+    point.header.stamp = ros::Time::now();
+    point.header.seq++;
+    point.header.frame_id = "base_link";
+    point.point.x = input.data[0];
+    point.point.y = input.data[1];
+    point.point.z = 0.18;
+    pub_right_laserscanner.publish(point);
 }
 
 void laserscanner_snd_leg_cb(std_msgs::Float64MultiArray input) {
-    ROS_INFO("DATA FROM SND LEG CAME IN");
+//     ROS_INFO("DATA FROM SND LEG CAME IN");
     laserscanner_snd_leg_x = input.data[0];
     laserscanner_snd_leg_y = input.data[1];
+    geometry_msgs::PointStamped point;
+    point.header.stamp = ros::Time::now();
+    point.header.seq++;
+    point.header.frame_id = "base_link";
+    point.point.x = input.data[0];
+    point.point.y = input.data[1];
+    point.point.z = 0.18;
+    pub_left_laserscanner.publish(point);
 }
 
 
@@ -801,6 +798,9 @@ int main (int argc, char** argv) {
     ros::ServiceServer service = nh.advertiseService("camera_lower_leg_tracking/init_reset", init_reset);
 
     pub_foot_strip = nh.advertise<sensor_msgs::PointCloud2>("footStrip", 1);
+
+    pub_left_laserscanner = nh.advertise<geometry_msgs::PointStamped>("pub_left_laserscanner", 1);
+    pub_right_laserscanner = nh.advertise<geometry_msgs::PointStamped>("pub_right_laserscanner", 1);
 
     kFilter_left = new KalmanFilter();
     kFilter_right = new KalmanFilter();
