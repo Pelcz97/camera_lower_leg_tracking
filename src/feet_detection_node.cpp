@@ -115,7 +115,7 @@ std::vector<float> findLegAxis(Cloud input, bool left) {
     Cloud lowerLeg(input, inds);
 
 
-    if (maxZ >= FOOT_HEIGHT + 0.1 && lowerLeg.size() > 300) {
+    if (maxZ >= FOOT_HEIGHT + 0.1 && lowerLeg.size() > 200) {
         ne.setSearchMethod (tree);
         ne.setInputCloud (lowerLeg.makeShared());
         ne.setKSearch (50);
@@ -355,7 +355,7 @@ float getFootHeight(Cloud leg) {
     }
 
     if (height > 0.15) {
-        ROS_WARN("The real height of the foot could not be measured! Now 0.15m will be used as default value");
+        ROS_WARN("The real height of the foot could not be measured! %fm was measured! Now 0.15m will be used as default value", height);
         height = 0.15;
     }
     ROS_INFO("The foot is %fm high", height);
@@ -421,11 +421,11 @@ void side_init(Cloud cloud) {
     if (init_side_frame < INIT_SIDE_CAPTURE_FRAME) {
         ROS_INFO("RECORDING BEGINS IN %i FRAMES", INIT_SIDE_CAPTURE_FRAME - init_side_frame);
     }
-    else if (init_side_frame < INIT_SIDE_END_FRAME) {
-        ROS_INFO("RECORDING ENDS IN %i FRAMES", INIT_SIDE_END_FRAME - init_side_frame);
+    else if (init_side_frame < INIT_SIDE_END_FRAME + INIT_SIDE_CAPTURE_FRAME) {
+        ROS_INFO("RECORDING ENDS IN %i FRAMES", INIT_SIDE_END_FRAME + INIT_SIDE_CAPTURE_FRAME- init_side_frame);
         side_init_cloud += cloud;
     }
-    else if (init_side_frame == INIT_SIDE_END_FRAME) {
+    else if (init_side_frame == INIT_SIDE_END_FRAME + INIT_SIDE_CAPTURE_FRAME) {
         ROS_INFO("Processing the Side Init");
         ROS_INFO("PointCloud before filtering has: %lu data points", side_init_cloud.points.size());
         ros::param::get("~point_size_pre_init", POINT_SIZE);
@@ -510,6 +510,49 @@ void removeColumn(Eigen::MatrixXf& matrix, unsigned int colToRemove) {
         matrix.block(0,colToRemove,numRows,numCols-colToRemove) = matrix.block(0,colToRemove+1,numRows,numCols-colToRemove);
 
     matrix.conservativeResize(numRows,numCols);
+}
+
+
+
+visualization_msgs::Marker findLegAxisMarker(geometry_msgs::PointStamped ankle, Eigen::MatrixXf transformation, std::vector<float> leg_coefficients) {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "base_link";
+    marker.header.stamp = ros::Time::now();
+    marker.id = 1;
+    marker.type = visualization_msgs::Marker::ARROW;
+    marker.action = visualization_msgs::Marker::ADD;
+    geometry_msgs::Point end;
+    marker.points.push_back(ankle.point);
+    marker.scale.x = 0.02;
+    marker.scale.y = 0.03;
+    marker.scale.z = 0.02;
+    marker.color.a = 1.0; // Don't forget to set the alpha!
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+
+
+    if (leg_coefficients.size() == 3) {
+        end.x = ankle.point.x + std::abs(leg_coefficients[0]);
+        end.y = ankle.point.y + std::abs(leg_coefficients[1]);
+        end.z = ankle.point.z + std::abs(leg_coefficients[2]);
+
+    }
+
+    if (leg_coefficients.empty() && transformation(3,3) == 1) {
+        ROS_INFO("USING FOOT TRANS FOR AXIS");
+        Eigen::Vector3f zAxis(0.0, 0.0, 1.0);
+        Eigen::MatrixXf  rotation = transformation;
+        removeRow(rotation, 3);
+        removeColumn(rotation, 3);
+        Eigen::Vector3f axis = rotation * zAxis;
+        end.x = ankle.point.x + axis[0];
+        end.y = ankle.point.y + axis[1];
+        end.z = ankle.point.z + axis[2];
+    }
+    marker.points.push_back(end);
+    return marker;
 }
 
 geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::MatrixXf footPose) {
@@ -601,37 +644,17 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
 
 
-            if (leg_coefficients.size() == 3) {
-                visualization_msgs::Marker marker;
-                marker.header.frame_id = "base_link";
-                marker.header.stamp = ros::Time::now();
-                marker.id = 0;
-                marker.type = visualization_msgs::Marker::ARROW;
-                marker.action = visualization_msgs::Marker::ADD;
-                geometry_msgs::Point end;
-                end.x = left_ankle.point.x + std::abs(leg_coefficients[0]);
-                end.y = left_ankle.point.y + std::abs(leg_coefficients[1]);
-                end.z = left_ankle.point.z + std::abs(leg_coefficients[2]);
-                marker.points.push_back(left_ankle.point);
-                marker.points.push_back(end);
-                marker.scale.x = 0.02;
-                marker.scale.y = 0.03;
-                marker.scale.z = 0.02;
-                marker.color.a = 1.0; // Don't forget to set the alpha!
-                marker.color.r = 0.0;
-                marker.color.g = 1.0;
-                marker.color.b = 0.0;
-
-                pub_left_foot_axis.publish(marker);
+            visualization_msgs::Marker marker = findLegAxisMarker(left_ankle, leftFootTrans, leg_coefficients);
 
 
 
-            }
 //             transformations_left_end = ros::Time::now();
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
             pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
+            if (marker.points[1].x != 0.0) pub_left_foot_axis.publish(marker);
+
         }
         if (init() && !right_leg.empty()) {
 //             transformations_right_start = ros::Time::now();
@@ -661,42 +684,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             std::vector<float> leg_coefficients = findLegAxis(right_leg, false);
 //             ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
 
-            if (leg_coefficients.size() == 4) {
+            visualization_msgs::Marker marker = findLegAxisMarker(right_ankle, rightFootTrans, leg_coefficients);
 
-                visualization_msgs::Marker marker;
-                marker.header.frame_id = "base_link";
-                marker.header.stamp = ros::Time::now();
-                marker.id = 1;
-                marker.type = visualization_msgs::Marker::ARROW;
-                marker.action = visualization_msgs::Marker::ADD;
-                geometry_msgs::Point end;
-                if (leg_coefficients[3] == 0.0) {
-                    end.x = right_ankle.point.x + std::abs(leg_coefficients[0]);
-                    end.y = right_ankle.point.y + std::abs(leg_coefficients[1]);
-                    end.z = right_ankle.point.z + std::abs(leg_coefficients[2]);
-                }
-                else {
-                    end.x = leg_coefficients[0];
-                    end.y = leg_coefficients[1];
-                    end.z = leg_coefficients[2];
-                }
 
-                marker.points.push_back(right_ankle.point);
-                marker.points.push_back(end);
-                marker.scale.x = 0.02;
-                marker.scale.y = 0.03;
-                marker.scale.z = 0.02;
-                marker.color.a = 1.0; // Don't forget to set the alpha!
-                marker.color.r = 0.0;
-                marker.color.g = 1.0;
-                marker.color.b = 0.0;
-                pub_right_foot_axis.publish(marker);
-            }
 //             transformations_right_end = ros::Time::now();
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
             pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
+            if (marker.points[1].x != 0.0) pub_right_foot_axis.publish(marker);
+
         }
     }
 //     ros::Time end = ros::Time::now();
@@ -758,20 +755,22 @@ int main (int argc, char** argv) {
     // Initialize ROS
     ros::init (argc, argv, "feet_detection");
     ros::NodeHandle nh;
-
+    
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
+    
 
     try {
-        transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));
+        transformStamped = tfBuffer.lookupTransform("base_link", "camera_legs_depth_optical_frame", ros::Time(0), ros::Duration(2));
     } catch (tf2::TransformException &ex) {
         ROS_WARN("%s", ex.what());
     }
 
     // Create a ROS subscriber for the input point cloud
     ros::Subscriber sub_camera_image = nh.subscribe ("/camera_legs/depth_registered/points", 1, cloud_cb);
-    ros::Subscriber laserscanner_fst_leg = nh.subscribe ("/leg_detection/pos_vel_acc_fst_leg", 1, laserscanner_fst_leg_cb);
-    ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
+//     ros::Subscriber laserscanner_fst_leg = nh.subscribe ("/leg_detection/pos_vel_acc_fst_leg", 1, laserscanner_fst_leg_cb);
+//     ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
+    
 
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("/camera_lower_leg_tracking/left_leg", 1);
@@ -812,10 +811,25 @@ int main (int argc, char** argv) {
     ros::param::get("~point_size_pre_init", POINT_SIZE);
     ros::param::get("~icp_fitness_threshhold", ICP_FITNESS_THRESHHOLD);
     ros::param::get("~init_frontal_capture_frame", INIT_FRONTAL_CAPTURE_FRAME);
-    ros::param::get("~init_side_capture_frame", INIT_SIDE_CAPTURE_FRAME);
-    ros::param::get("~init_side_end_frame", INIT_SIDE_END_FRAME);
+    ros::param::get("~init_side_capture_start", INIT_SIDE_CAPTURE_FRAME);
+    ros::param::get("~init_side_captured_frames", INIT_SIDE_END_FRAME);
+    int perform_side_init;
+    ros::param::get("~perform_side_init", perform_side_init);
+    if (perform_side_init == -1) {
+        ros::param::get("~foot_length", footLength);
+        ros::param::get("~foot_height", FOOT_HEIGHT);
+        ros::param::get("~point_size_post_init", POINT_SIZE);
+        ros::param::get("~min_cluster_size_post_init", MIN_CLUSTER_SIZE);
+
+
+        init_side_done = true;
+        ROS_INFO("DONT NEED A SIDE INIT! FOOT PARAMETERS WILL BE USED");
+    }
+    ROS_INFO("Now we will Init the Side");
 
     // Spin
     ros::spin();
     return 0;
 }
+
+//TODO Prüfen, warum RVIZ kaputt geht! Danach das Sprunggelenk und die Ferse anhand des Laserscanners stabilisieren!, Version schreiben die keine Inits benötigt!
