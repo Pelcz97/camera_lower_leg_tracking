@@ -7,9 +7,16 @@
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
 
+KalmanFilter* kFilter_left;
+KalmanFilter* kFilter_right;
+KalmanFilter* kFilter_LSR_left;
+KalmanFilter* kFilter_LSR_right;
+
+ros::Time previous_T_left, previous_T_right;
+
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_left_toe_kf, pub_right_toe_kf;
 // geometry_msgs::PointStamped old_right_toe, old_left_toe;
 // float addedDistancesLeft = 0, addedDistancesRight = 0;
 // int iterations = 0;
@@ -201,6 +208,16 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
+geometry_msgs::PointStamped vec_to_pointStamped(std::vector<double> vec, std_msgs::Header header) {
+    geometry_msgs::PointStamped msg;
+    msg.header = header;
+    
+    msg.point.x = vec[0];
+    msg.point.y = vec[1];
+    msg.point.z = vec[2];
+    
+    return msg;
+}
 
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     ros::Time start = ros::Time::now();
@@ -215,6 +232,33 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //             float distance = sqrt(pow(old_left_toe.point.x - left_toe.point.x, 2) + pow(old_left_toe.point.y - left_toe.point.y, 2) + pow(old_left_toe.point.z - left_toe.point.z, 2));
 //             addedDistancesLeft += std::abs(distance);
 //             old_left_toe = left_toe;
+            if (!kFilter_left->isInitializated()) {
+                std::vector<double> toeLeft;
+                toeLeft.push_back(left_toe.point.x);
+                toeLeft.push_back(left_toe.point.y);
+                toeLeft.push_back(left_toe.point.z);
+                toeLeft.push_back(0);
+                toeLeft.push_back(0);
+                toeLeft.push_back(0);
+                previous_T_left = ros::Time::now();
+                
+                if (!kFilter_left->configure(toeLeft)) ROS_ERROR("KalmanFilter for the left Toe couldn't configure!");
+                
+            }
+            else {
+                std::vector<double> data_in_l, data_out_l;
+                data_in_l.push_back(left_toe.point.x);
+                data_in_l.push_back(left_toe.point.y);
+                data_in_l.push_back(left_toe.point.z);
+                ros::Time now_left = ros::Time::now();
+                double delta_t_left = (now_left - previous_T_left).toSec();
+                
+                kFilter_left->update(data_in_l, data_out_l, delta_t_left, true);
+                previous_T_left = now_left;
+                
+                geometry_msgs::PointStamped msg = vec_to_pointStamped(data_out_l, left_toe.header);
+                pub_left_toe_kf.publish(msg);
+            }
             pub_left_leg.publish(left_leg);
             pub_left_toe.publish(left_toe);
         }
@@ -224,6 +268,33 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //             addedDistancesRight += std::abs(distance);
 
 //             old_right_toe = right_toe;
+            
+            if (!kFilter_right->isInitializated()) {
+                std::vector<double> toeRight;
+                toeRight.push_back(right_toe.point.x);
+                toeRight.push_back(right_toe.point.y);
+                toeRight.push_back(right_toe.point.z);
+                toeRight.push_back(0);
+                toeRight.push_back(0);
+                toeRight.push_back(0);
+                previous_T_right = ros::Time::now();
+                
+                if (!kFilter_right->configure(toeRight)) ROS_ERROR("KalmanFilter for the right Toe couldn't configure!");
+            }
+            else{
+                std::vector<double> data_in_r, data_out_r;
+                data_in_r.push_back(right_toe.point.x);
+                data_in_r.push_back(right_toe.point.y);
+                data_in_r.push_back(right_toe.point.z);
+                ros::Time now_right = ros::Time::now();
+                double delta_t_right = (now_right - previous_T_right).toSec();
+                
+                kFilter_right->update(data_in_r, data_out_r, delta_t_right, true);
+                previous_T_right = now_right;
+                
+                geometry_msgs::PointStamped msg = vec_to_pointStamped(data_out_r, right_toe.header);
+                pub_right_toe_kf.publish(msg);
+            }
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
         }
@@ -235,6 +306,11 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
     }
 }
 
+void lsr_cb(leg_tracker::PersonMsg msg) {
+    
+    
+}
+
 int main (int argc, char** argv) {
     // Initialize ROS
     ros::init (argc, argv, "toe_detection");
@@ -243,19 +319,29 @@ int main (int argc, char** argv) {
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener(tfBuffer);
 
+
     try {
         transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));
     } catch (tf2::TransformException &ex) {
         ROS_WARN("%s", ex.what());
     }
+    
+    kFilter_left = new KalmanFilter();
+    kFilter_right = new KalmanFilter();
+    kFilter_LSR_left = new KalmanFilter();
+    kFilter_LSR_right = new KalmanFilter();
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber sub = nh.subscribe ("/camera_legs/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber sub_lsr = nh.subscribe ("/leg_detection/people_msg_stamped", 1, lsr_cb);
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
     pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
     pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
+    
+    pub_left_toe_kf = nh.advertise<geometry_msgs::PointStamped>("left_toe_kf",1);
+    pub_right_toe_kf = nh.advertise<geometry_msgs::PointStamped>("right_toe_kf",1);
 
     ros::spin();
     return 0;

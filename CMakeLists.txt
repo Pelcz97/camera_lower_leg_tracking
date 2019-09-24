@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS roscpp
     genmsg
     geometry_msgs
     visualization_msgs
+    leg_tracker
     tf2
     tf2_ros
     tf2_msgs

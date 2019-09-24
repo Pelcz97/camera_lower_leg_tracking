@@ -48,6 +48,7 @@
 #include <std_srvs/Trigger.h>
 
 #include <iirob_filters/kalman_filter.h>
+#include <leg_tracker/PersonMsg.h>
 
 typedef pcl::PointXYZRGB Point;
 
