@@ -321,7 +321,7 @@ int main (int argc, char** argv) {
 
 
     try {
-        transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));
+        transformStamped = tfBuffer.lookupTransform("base_link", "camera_legs_depth_optical_frame", ros::Time(0), ros::Duration(2));
     } catch (tf2::TransformException &ex) {
         ROS_WARN("%s", ex.what());
     }
