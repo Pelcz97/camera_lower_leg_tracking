@@ -57,7 +57,8 @@
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>geometry_msgs</depend>
-
+  <depend>leg_tracker</depend>
+  <depend>visualization_msgs</depend>
   
 
   <!-- The export tag contains other, unspecified, tags -->

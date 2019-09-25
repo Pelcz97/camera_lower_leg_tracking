@@ -14,9 +14,12 @@ KalmanFilter* kFilter_LSR_right;
 
 ros::Time previous_T_left, previous_T_right;
 
+std::vector< std::vector<double>  > x_hats(2, std::vector<double> (3,0));
+bool p1_completed = false;
+
 
 geometry_msgs::TransformStamped transformStamped;
-ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_left_toe_kf, pub_right_toe_kf;
+ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_left_toe_kf, pub_right_toe_kf, pub_left_toe_seq, pub_right_toe_seq;
 // geometry_msgs::PointStamped old_right_toe, old_left_toe;
 // float addedDistancesLeft = 0, addedDistancesRight = 0;
 // int iterations = 0;
@@ -208,7 +211,7 @@ std::vector<Cloud> splitLegs(Cloud input_cloud) {
     return legs;
 }
 
-geometry_msgs::PointStamped vec_to_pointStamped(std::vector<double> vec, std_msgs::Header header) {
+geometry_msgs::PointStamped vecToPointStamped(std::vector<double> vec, std_msgs::Header header) {
     geometry_msgs::PointStamped msg;
     msg.header = header;
     
@@ -255,8 +258,9 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 
                 kFilter_left->update(data_in_l, data_out_l, delta_t_left, true);
                 previous_T_left = now_left;
+                x_hats[0] = data_out_l;
                 
-                geometry_msgs::PointStamped msg = vec_to_pointStamped(data_out_l, left_toe.header);
+                geometry_msgs::PointStamped msg = vecToPointStamped(data_out_l, left_toe.header);
                 pub_left_toe_kf.publish(msg);
             }
             pub_left_leg.publish(left_leg);
@@ -291,24 +295,85 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 
                 kFilter_right->update(data_in_r, data_out_r, delta_t_right, true);
                 previous_T_right = now_right;
+                x_hats[1] = data_out_r;
                 
-                geometry_msgs::PointStamped msg = vec_to_pointStamped(data_out_r, right_toe.header);
+                geometry_msgs::PointStamped msg = vecToPointStamped(data_out_r, right_toe.header);
                 pub_right_toe_kf.publish(msg);
             }
             pub_right_leg.publish(right_leg);
             pub_right_toe.publish(right_toe);
         }
+        p1_completed = !right_leg.empty() && !left_leg.empty();
 //         ROS_INFO("The average distance in the LEFT toe is %fm", addedDistancesLeft/iterations);
 //         ROS_INFO("The average distance in the RIGHT toe is %fm", addedDistancesRight/iterations);
     ros::Time end = ros::Time::now();
-    ROS_INFO("THIS CALLBACK TOOK %f SECONDS", (end - start).toSec());
+    //ROS_INFO("THIS CALLBACK TOOK %f SECONDS", (end - start).toSec());
 
     }
 }
 
+//side == 0 --> left leg; 1 --> right_leg
+std::vector<double> shinToToe(leg_tracker::LegMsg leg,int side) {
+    std::vector<double> out;
+    std::vector<double> x_hat = x_hats[side];
+    double azimuth, inclination;
+
+    //laser scanner at height of 0.178 according to tf
+    double x_dist = x_hat[0] - leg.position.x;
+    double y_dist = x_hat[1] - leg.position.y;
+    double z_dist = x_hat[2] - 0.178;
+    
+    double r = std::sqrt( std::pow(x_dist,2) +  std::pow(y_dist,2) + std::pow(z_dist,2) );
+    
+    if (r != 0) {
+        inclination = std::acos( z_dist / r);
+        azimuth = std::atan2(y_dist, x_dist);
+    }
+    else {
+        inclination = 0;
+        azimuth = 0;
+    }
+    //Calculate estimated toe position with sphere coordinates
+    
+    ROS_INFO("R is %.8f Azimuth is %.8f Inclination is %.8f",r , azimuth, inclination);
+    double x_toe = leg.position.x + r * std::sin(inclination) * std::cos(azimuth);
+    double y_toe = leg.position.y + r * std::sin(inclination) * std::sin(azimuth);
+    double z_toe = 0.178 + r * std::cos(inclination);
+    
+    out.push_back(x_toe);
+    out.push_back(y_toe);
+    out.push_back(z_toe);
+    
+    return out;
+}
+
 void lsr_cb(leg_tracker::PersonMsg msg) {
+    //ROS_INFO("Laser callback, received msg is x : %f, y : %f ! ", msg.leg1.position.x , msg.leg1.position.y);
+    if (!p1_completed) return;
+    ROS_INFO("Laser passed p1 completed");
+    std::vector<double> x_left, x_right;
     
+    //new prediction for x need here?
     
+    if (msg.leg1.position.y > msg.leg2.position.y) {
+        x_left = shinToToe(msg.leg1, 0);
+        x_right = shinToToe(msg.leg2, 1);
+    }
+    else {
+        x_left = shinToToe(msg.leg2, 0);
+        x_right = shinToToe(msg.leg1, 1);
+    }
+    
+    ROS_INFO("Left Values x: %.8f, y: %.8f z: %.8f", x_left[0], x_left[1], x_left[2]); 
+    //Update here load R matrix? use seperate Kalmans?
+    
+    geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left, msg.header);
+    geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right, msg.header);
+    
+    pub_left_toe_seq.publish(left_msg);
+    pub_right_toe_seq.publish(right_msg);
+    
+    p1_completed = false;
 }
 
 int main (int argc, char** argv) {
@@ -342,6 +407,9 @@ int main (int argc, char** argv) {
     
     pub_left_toe_kf = nh.advertise<geometry_msgs::PointStamped>("left_toe_kf",1);
     pub_right_toe_kf = nh.advertise<geometry_msgs::PointStamped>("right_toe_kf",1);
+    
+    pub_left_toe_seq = nh.advertise<geometry_msgs::PointStamped>("left_toe_seq",1);
+    pub_right_toe_seq = nh.advertise<geometry_msgs::PointStamped>("right_toe_seq",1);
 
     ros::spin();
     return 0;

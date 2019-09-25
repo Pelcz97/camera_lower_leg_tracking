@@ -121,7 +121,7 @@ endif()
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES camera_lower_leg_tracking
-  CATKIN_DEPENDS roscpp sensor_msgs message_runtime geometry_msgs
+  CATKIN_DEPENDS roscpp sensor_msgs message_runtime geometry_msgs visualization_msgs leg_tracker
  # DEPENDS system_lib
 )
 
