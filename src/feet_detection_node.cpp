@@ -3,9 +3,14 @@
 
 int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
 
+float frame_cnt = 0;
+
+float leftAnkleDistance, leftHeelDistance, leftToeDistance, rightToeDistance, rightAnkleDistance, rightHeelDistance;
+
+
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg, pub_left_foot_axis, pub_right_foot_axis, pub_right_laserscanner, pub_left_laserscanner;
-geometry_msgs::PointStamped oldLeft,oldRight;
+geometry_msgs::PointStamped oldLeft,oldRight, oldLeftAnkle, oldRightAnkle, oldLeftHeel, oldRightHeel;
 Cloud_ptr right_foot_reference, left_foot_reference, right_leg_reference, left_leg_reference;
 Cloud side_init_cloud;
 bool init_front_done = false, init_side_done = false;
@@ -600,6 +605,12 @@ bool init() {
     return init_side_done && init_front_done;
 }
 
+
+float distancePoints(geometry_msgs::PointStamped point1, geometry_msgs::PointStamped point2) {
+      float distance = sqrt(pow(point1.point.x - point2.point.x, 2) + pow(point1.point.y - point2.point.y, 2) + pow(point1.point.z - point2.point.z, 2));  
+      return distance;
+}
+
 void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time transformations_left_end, transformations_left_start, transformations_right_end, transformations_right_start;
 //     ros::Time start = ros::Time::now();
@@ -612,6 +623,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time end_clustering = ros::Time::now();
     if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
     if (init() && !legs.empty()) {
+            frame_cnt += 1;
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
         if (!left_leg.empty()) {
@@ -654,7 +666,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_left_heel.publish(left_heel);
             pub_left_ankle.publish(left_ankle);
             if (marker.points[1].x != 0.0) pub_left_foot_axis.publish(marker);
-
+            
+//             leftToeDistance += distancePoints(oldLeft, left_toe);
+//             leftHeelDistance += distancePoints(oldLeftHeel, left_heel);
+//             leftAnkleDistance += distancePoints(oldLeftAnkle, left_ankle);
+//             
+//             ROS_INFO("Avg Distances: LeftToe %f, LeftHeel %f, LeftAnkle %f", leftToeDistance/frame_cnt, leftHeelDistance/frame_cnt, leftAnkleDistance/frame_cnt);
+//             
+//             oldLeft = left_toe;
+//             oldLeftHeel = left_heel;
+//             oldLeftAnkle = left_ankle;
         }
         if (init() && !right_leg.empty()) {
 //             transformations_right_start = ros::Time::now();
@@ -693,8 +714,21 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_right_heel.publish(right_heel);
             pub_right_ankle.publish(right_ankle);
             if (marker.points[1].x != 0.0) pub_right_foot_axis.publish(marker);
+            
+            
+//             rightToeDistance += distancePoints(oldRight, right_toe);
+//             rightHeelDistance += distancePoints(oldRightHeel, right_heel);
+//             rightAnkleDistance += distancePoints(oldRightAnkle, right_ankle);
+//                         
+//             ROS_INFO("Avg Distances: RightToe %f, RightHeel %f, RightAnkle %f", rightToeDistance/frame_cnt, rightHeelDistance/frame_cnt, rightAnkleDistance/frame_cnt);
+//             
+//             oldRight = right_toe;
+//             oldRightAnkle = right_ankle;
+//             oldRightHeel = right_heel;
 
         }
+//                 ROS_INFO("This was Frame %f", frame_cnt);
+
     }
 //     ros::Time end = ros::Time::now();
 //     double all = (end - start).toSec();
@@ -708,6 +742,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 
 //     float success_percent = ((float) Icp_error_count /(float) (icp_count));
 //     ROS_INFO("ICP's error rate is: %f",success_percent);
+
 }
 
 
@@ -832,4 +867,4 @@ int main (int argc, char** argv) {
     return 0;
 }
 
-//TODO Prüfen, warum RVIZ kaputt geht! Danach das Sprunggelenk und die Ferse anhand des Laserscanners stabilisieren!, Version schreiben die keine Inits benötigt!
+//TODO Danach das Sprunggelenk und die Ferse anhand des Laserscanners stabilisieren!
