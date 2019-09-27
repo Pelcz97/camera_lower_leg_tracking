@@ -744,6 +744,7 @@ bool init_reset(std_srvs::Trigger::Request& request, std_srvs::Trigger::Response
     ROS_INFO("RESET INIT");
     init_front_done = false;
     init_side_done = false;
+    side_init_cloud.clear();
     init_side_frame = 0;
     init_frontal_frame = 0;
     response.success = true;
@@ -761,13 +762,13 @@ int main (int argc, char** argv) {
     
 
     try {
-        transformStamped = tfBuffer.lookupTransform("base_link", "camera_legs_depth_optical_frame", ros::Time(0), ros::Duration(2));
+        transformStamped = tfBuffer.lookupTransform("base_link", "camera_depth_optical_frame", ros::Time(0), ros::Duration(2));
     } catch (tf2::TransformException &ex) {
         ROS_WARN("%s", ex.what());
     }
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub_camera_image = nh.subscribe ("/camera_legs/depth_registered/points", 1, cloud_cb);
+    ros::Subscriber sub_camera_image = nh.subscribe ("/camera/depth_registered/points", 1, cloud_cb);
 //     ros::Subscriber laserscanner_fst_leg = nh.subscribe ("/leg_detection/pos_vel_acc_fst_leg", 1, laserscanner_fst_leg_cb);
 //     ros::Subscriber laserscanner_snd_leg = nh.subscribe ("/leg_detection/pos_vel_acc_snd_leg", 1, laserscanner_snd_leg_cb);
     
@@ -825,7 +826,6 @@ int main (int argc, char** argv) {
         init_side_done = true;
         ROS_INFO("DONT NEED A SIDE INIT! FOOT PARAMETERS WILL BE USED");
     }
-    ROS_INFO("Now we will Init the Side");
 
     // Spin
     ros::spin();
