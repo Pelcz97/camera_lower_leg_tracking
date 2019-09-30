@@ -6,6 +6,8 @@
 #define GND_LEVEL (0.01)
 #define POINT_SIZE (0.01)
 #define CLUSTER_TOLERANCE (0.03)
+#define SHIN_HEIGHT (0.178)
+#define SHIN_TOLERANCE (0.06)
 
 KalmanFilter* kFilter_left;
 KalmanFilter* kFilter_right;
@@ -13,6 +15,7 @@ KalmanFilter* kFilter_LSR_left;
 KalmanFilter* kFilter_LSR_right;
 
 ros::Time previous_T_left, previous_T_right;
+double shinToeDist = 0;
 
 std::vector< std::vector<double>  > x_hats(2, std::vector<double> (3,0));
 bool p1_completed = false;
@@ -107,6 +110,53 @@ std::vector<Cloud> splitCluster(Cloud both_legs) {
 
 
 //side can only be left or right!
+geometry_msgs:: PointStamped findShin(Cloud input_cloud) {
+
+    std::vector<int> cloud_inds;
+    geometry_msgs::PointStamped maxX;
+    maxX.header.stamp = ros::Time::now();
+    maxX.header.frame_id = "base_link";
+    maxX.header.seq++;
+    double height_diff;
+    if (!input_cloud.empty()) {
+
+        for(int i = 0; i < input_cloud.size(); i++ ) {
+            height_diff = std::abs(input_cloud.points[i].z - SHIN_HEIGHT);
+            if (height_diff > SHIN_TOLERANCE) continue;
+            else {
+                if (cloud_inds.empty()) {
+                    maxX.point.x = input_cloud.points[i].x;
+                    maxX.point.y = input_cloud.points[i].y;
+                    maxX.point.z = input_cloud.points[i].z;
+                }
+                else {
+                    float X = input_cloud.points[i].x;
+                    if( X > maxX.point.x) {
+                        maxX.point.x = input_cloud.points[i].x;
+                        maxX.point.y = input_cloud.points[i].y;
+                        maxX.point.z = input_cloud.points[i].z;
+                    }
+                }
+                cloud_inds.push_back(i);
+            }
+        }
+        Indices inds;
+        for (int i = 0; i < cloud_inds.size(); i++) {
+            int cloud_ind = cloud_inds[i];
+            if  ((input_cloud.points[cloud_ind].x + 0.02) >= maxX.point.x) {
+                inds.push_back(i);
+            }
+        }
+        ROS_INFO("Found %d shin candidates", cloud_inds.size());
+        Cloud frontalPoints(input_cloud, inds);
+        Point centroid;
+        pcl::computeCentroid(frontalPoints, centroid);
+        maxX.point.y = centroid.y;
+        maxX.point.z = centroid.z;
+    }
+    return maxX;
+}
+
 geometry_msgs:: PointStamped findToe(Cloud input_cloud) {
 
     geometry_msgs::PointStamped maxX;
@@ -232,6 +282,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //         iterations++;
         if (!left_leg.empty()) {
             geometry_msgs:: PointStamped left_toe = findToe(left_leg);
+            ROS_INFO("LEFT LEG");
+            //geometry_msgs:: PointStamped left_shin = findShin(left_leg);
 //             float distance = sqrt(pow(old_left_toe.point.x - left_toe.point.x, 2) + pow(old_left_toe.point.y - left_toe.point.y, 2) + pow(old_left_toe.point.z - left_toe.point.z, 2));
 //             addedDistancesLeft += std::abs(distance);
 //             old_left_toe = left_toe;
@@ -268,6 +320,8 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
         }
         if (!right_leg.empty()) {
             geometry_msgs:: PointStamped right_toe = findToe(right_leg);
+            ROS_INFO("RIGHT LEG");
+            //geometry_msgs:: PointStamped right_shin = findShin(right_leg);
 //             float distance = sqrt(pow(old_right_toe.point.x - right_toe.point.x, 2) + pow(old_right_toe.point.y - right_toe.point.y, 2) + pow(old_right_toe.point.z - right_toe.point.z, 2));
 //             addedDistancesRight += std::abs(distance);
 
@@ -321,9 +375,11 @@ std::vector<double> shinToToe(leg_tracker::LegMsg leg,int side) {
     //laser scanner at height of 0.178 according to tf
     double x_dist = x_hat[0] - leg.position.x;
     double y_dist = x_hat[1] - leg.position.y;
-    double z_dist = x_hat[2] - 0.178;
+    double z_dist = x_hat[2] - SHIN_HEIGHT;
     
     double r = std::sqrt( std::pow(x_dist,2) +  std::pow(y_dist,2) + std::pow(z_dist,2) );
+    if (shinToeDist == 0) shinToeDist = r;
+    else shinToeDist = (shinToeDist + r) / 2;
     
     if (r != 0) {
         inclination = std::acos( z_dist / r);
@@ -335,10 +391,10 @@ std::vector<double> shinToToe(leg_tracker::LegMsg leg,int side) {
     }
     //Calculate estimated toe position with sphere coordinates
     
-    ROS_INFO("R is %.8f Azimuth is %.8f Inclination is %.8f",r , azimuth, inclination);
-    double x_toe = leg.position.x + r * std::sin(inclination) * std::cos(azimuth);
-    double y_toe = leg.position.y + r * std::sin(inclination) * std::sin(azimuth);
-    double z_toe = 0.178 + r * std::cos(inclination);
+    ROS_INFO("R is %.8f Azimuth is %.8f Inclination is %.8f",shinToeDist , azimuth, inclination);
+    double x_toe = leg.position.x + shinToeDist * std::sin(inclination) * std::cos(azimuth);
+    double y_toe = leg.position.y + shinToeDist * std::sin(inclination) * std::sin(azimuth);
+    double z_toe = SHIN_HEIGHT + shinToeDist * std::cos(inclination);
     
     out.push_back(x_toe);
     out.push_back(y_toe);
@@ -351,24 +407,37 @@ void lsr_cb(leg_tracker::PersonMsg msg) {
     //ROS_INFO("Laser callback, received msg is x : %f, y : %f ! ", msg.leg1.position.x , msg.leg1.position.y);
     if (!p1_completed) return;
     ROS_INFO("Laser passed p1 completed");
-    std::vector<double> x_left, x_right;
+    std::vector<double> x_left_in, x_right_in;
+    std::vector<double> x_left_out(3), x_right_out(3);
     
     //new prediction for x need here?
     
     if (msg.leg1.position.y > msg.leg2.position.y) {
-        x_left = shinToToe(msg.leg1, 0);
-        x_right = shinToToe(msg.leg2, 1);
+        x_left_in = shinToToe(msg.leg1, 0);
+        x_right_in = shinToToe(msg.leg2, 1);
     }
     else {
-        x_left = shinToToe(msg.leg2, 0);
-        x_right = shinToToe(msg.leg1, 1);
+        x_left_in = shinToToe(msg.leg2, 0);
+        x_right_in = shinToToe(msg.leg1, 1);
     }
     
-    ROS_INFO("Left Values x: %.8f, y: %.8f z: %.8f", x_left[0], x_left[1], x_left[2]); 
+    ROS_INFO("Left Values x: %.8f, y: %.8f z: %.8f", x_left_in[0], x_left_in[1], x_left_in[2]); 
     //Update here load R matrix? use seperate Kalmans?
     
-    geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left, msg.header);
-    geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right, msg.header);
+    
+    
+    //geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left_in, msg.header);
+    //geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right_in, msg.header);
+    
+    double delta_t_left = (ros::Time::now() - previous_T_left).toSec();
+    double delta_t_right = (ros::Time::now() - previous_T_right).toSec();
+    
+    kFilter_right->update(x_right_in, x_right_out, delta_t_right, true);
+    kFilter_left->update(x_left_in, x_left_out, delta_t_left, true);
+    
+    geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left_out, msg.header);
+    geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right_out, msg.header);
+    
     
     pub_left_toe_seq.publish(left_msg);
     pub_right_toe_seq.publish(right_msg);
@@ -402,6 +471,8 @@ int main (int argc, char** argv) {
 
     pub_left_leg = nh.advertise<sensor_msgs::PointCloud2>("left_leg", 1);
     pub_right_leg = nh.advertise<sensor_msgs::PointCloud2>("right_leg", 1);
+    //pub_left_leg = nh.advertise<geometry_msgs::PointStamped>("left_leg", 1);
+    //pub_right_leg = nh.advertise<geometry_msgs::PointStamped>("right_leg", 1);
     pub_left_toe = nh.advertise<geometry_msgs::PointStamped>("left_toe", 1);
     pub_right_toe = nh.advertise<geometry_msgs::PointStamped>("right_toe", 1);
     
