@@ -6,7 +6,7 @@
     <node name="camera_depth_optical_frame_transform" pkg="tf2_ros" type="static_transform_publisher" args="0 0 0 -0.5 0.5 -0.5 0.5 camera_legs_depth_frame camera_legs_depth_optical_frame" />
     
     <node pkg="camera_lower_leg_tracking" name="toe_detection" type="toe_detection_node" output="screen">
-        <rosparam command="load" file="$(find camera_lower_leg_tracking)/include/KalmanFilterParameters.yaml"/>
+        <rosparam command="load" file="$(find camera_lower_leg_tracking)/include/KalmanFilterParameters_seq.yaml"/>
     </node>
 
 </launch>
