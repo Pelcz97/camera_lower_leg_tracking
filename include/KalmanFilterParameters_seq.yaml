@@ -79,13 +79,9 @@ KalmanFilter:
       #0,         0,        0.000001]
       
       # define r R = E(vv^T) (v is meassurement noise vector)
-  R: [0.012, 0, 0
-      0, 0.012, 0
-      0, 0, 0.012]   
-  R_loc: [0.001,      0,        0,
-            0,         0.001,     0,
-            0,         0,        0.001]
-  
+  R: [0.012,      0,        0,
+      0,         0.012,     0,
+      0,         0,        0.012]
       
       
   # n x n identity matrix is probably good enough
@@ -98,5 +94,7 @@ KalmanFilter:
   # n (init state vector)
   x0: [0, 0, 0, 0, 0, 0]
 #params: {number_of_elements_: 5}
-
+2R: [0.001, 0, 0,
+        0, 0.001, 0,
+        0, 0,  0.001]
 # state vector = [x,y,z,x',y',z'] (where w' is velocity in w direction)

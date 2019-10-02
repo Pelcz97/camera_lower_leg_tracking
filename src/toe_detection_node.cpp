@@ -308,7 +308,6 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 x_hats[0] = toeLeft;
                 
                 if (!kFilter_left->configure(toeLeft)) ROS_ERROR("KalmanFilter for the left Toe couldn't configure!");
-                if (!kFilter_LSR_left->configure(toeLeft)) ROS_ERROR("KalmanFilter for sequential left Toe couldn't configure!");
                 
             }
             else {
@@ -328,13 +327,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 pub_left_toe_kf.publish(msg);
 
                 mtx_left.lock();
-                double delta_t_left_seq = (now_left - previous_T_left_seq).toSec();
-                kFilter_LSR_left->update(data_in_l, data_out_l_seq, delta_t_left_seq, true, R_loc);
-                x_hats[0] = data_out_l_seq;
+                if(kFilter_LSR_left->isInitializated()) {
+                    double delta_t_left_seq = (now_left - previous_T_left_seq).toSec();
+                    kFilter_LSR_left->update(data_in_l, data_out_l_seq, delta_t_left_seq, true, R_loc);
+                    x_hats[0] = data_out_l_seq;
+                    previous_T_left_seq = now_left;
 
-                geometry_msgs::PointStamped msg_seq = vecToPointStamped(data_out_l_seq, left_toe.header);
-                
-                pub_left_toe_seq.publish(msg_seq);
+                    geometry_msgs::PointStamped msg_seq = vecToPointStamped(data_out_l_seq, left_toe.header);
+                    
+                    pub_left_toe_seq.publish(msg_seq);
+                }
                 left_init = true;
                 mtx_left.unlock();
             }
@@ -364,7 +366,6 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 x_hats[1] = toeRight;
                 
                 if (!kFilter_right->configure(toeRight)) ROS_ERROR("KalmanFilter for the right Toe couldn't configure!");
-                if (!kFilter_LSR_right->configure(toeRight)) ROS_ERROR("KalmanFilter for sequential left Toe couldn't configure!");
             }
             else{
                 ROS_INFO("RIGHT TOE Measured");
@@ -383,13 +384,15 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
                 pub_right_toe_kf.publish(msg);
 
                 mtx_right.lock();
-                double delta_t_right_seq = (now_right - previous_T_right_seq).toSec();
-                kFilter_LSR_right->update(data_in_r, data_out_r_seq, delta_t_right_seq, true, R_loc);
-                x_hats[1] = data_out_r_seq;
-                previous_T_right_seq = now_right;
-                
-                geometry_msgs::PointStamped msg_seq = vecToPointStamped(data_out_r_seq, right_toe.header);
-                pub_right_toe_seq.publish(msg_seq);
+                if(kFilter_LSR_right->isInitializated()) {
+                    double delta_t_right_seq = (now_right - previous_T_right_seq).toSec();
+                    kFilter_LSR_right->update(data_in_r, data_out_r_seq, delta_t_right_seq, true, R_loc);
+                    x_hats[1] = data_out_r_seq;
+                    previous_T_right_seq = now_right;
+                    
+                    geometry_msgs::PointStamped msg_seq = vecToPointStamped(data_out_r_seq, right_toe.header);
+                    pub_right_toe_seq.publish(msg_seq);
+                }
                 right_init = true;
                 mtx_right.unlock();
             }
@@ -431,10 +434,11 @@ std::vector<double> shinToToe(leg_tracker::LegMsg leg, std::vector<double> toe_e
     //Calculate estimated toe position with sphere coordinates
     
     ROS_INFO("R is %.8f Azimuth is %.8f Inclination is %.8f",shinToeDist , azimuth, inclination);
+    
     double x_toe = leg.position.x + shinToeDist * std::sin(inclination) * std::cos(azimuth);
     double y_toe = leg.position.y + shinToeDist * std::sin(inclination) * std::sin(azimuth);
     double z_toe = SHIN_HEIGHT + shinToeDist * std::cos(inclination);
-    
+    ROS_INFO("Estimation is %.8f, %.8f, %.8f; estimate was %.8f,%.8f,%.8f,",x_toe,y_toe,z_toe, x_hat[0], x_hat[1], x_hat[2]);
     out.push_back(x_toe);
     out.push_back(y_toe);
     out.push_back(z_toe);
@@ -466,29 +470,51 @@ void lsr_cb(leg_tracker::PersonMsg msg) {
       
     //geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left_in, msg.header);
     //geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right_in, msg.header);
-    
-       
-    if(kFilter_LSR_left->isInitializated() && left_init) {
+    if(!(kFilter_LSR_left->isInitializated()) && left_init){
+        mtx_left.lock();
+        ROS_INFO("INIT KALMAN SEQ LEFT");
+        std::vector<double> est_left(3);
+        double delta_t_left = (ros::Time::now() - previous_T_left).toSec();
+        kFilter_left->computePrediction(est_left, delta_t_left);
+        if(!kFilter_LSR_left->configure(est_left)) ROS_ERROR("Seq KalmanFilter for the left Toe couldn't configure!");
+        previous_T_left_seq = ros::Time::now();
+        mtx_left.unlock();
+    }
+    else if(kFilter_LSR_left->isInitializated() && left_init) {
         mtx_left.lock();
         std::vector<double> est_left(3); 
-        double delta_t_left = (ros::Time::now() - previous_T_left).toSec();
+        double delta_t_left = (ros::Time::now() - previous_T_left_seq).toSec();
         kFilter_LSR_left->computePrediction(est_left, delta_t_left);
         std::vector<double> toe_est = shinToToe(left_leg, est_left);
-        kFilter_LSR_left->update(est_left, x_left_out, delta_t_left, true);
+        std::cout<< "Measurement vecotr left is: " << toe_est.size() << "x : " << toe_est[0] << " y: " << toe_est[1] << " z: " << toe_est[2] << std::endl;
+        kFilter_LSR_left->update(toe_est, x_left_out, delta_t_left, true);
         x_hats[0] = x_left_out;
         geometry_msgs::PointStamped left_msg = vecToPointStamped(x_left_out, msg.header);
+        previous_T_left_seq = ros::Time::now();
         pub_left_toe_seq.publish(left_msg);
         mtx_left.unlock();
     }
-    if(kFilter_LSR_right->isInitializated() && right_init) {
+    if(!(kFilter_LSR_right->isInitializated()) && right_init){
+        mtx_left.lock();
+        ROS_INFO("INIT KALMAN SEQ RIGHT");
+        std::vector<double> est_right(3);
+        double delta_t_right = (ros::Time::now() - previous_T_right).toSec();
+        kFilter_right->computePrediction(est_right, delta_t_right);
+        if(!kFilter_LSR_right->configure(est_right)) ROS_ERROR("Seq KalmanFilter for the right Toe couldn't configure!");
+        previous_T_right_seq = ros::Time::now();
+        mtx_left.unlock();
+    }
+    else if(kFilter_LSR_right->isInitializated() && right_init) {
         mtx_right.lock();
         std::vector<double> est_right(3); 
-        double delta_t_right = (ros::Time::now() - previous_T_right).toSec();
-        kFilter_LSR_left->computePrediction(est_right, delta_t_right);
+        double delta_t_right = (ros::Time::now() - previous_T_right_seq).toSec();
+        kFilter_LSR_right->computePrediction(est_right, delta_t_right);
         std::vector<double> toe_est = shinToToe(right_leg, est_right);
-        kFilter_LSR_left->update(est_right, x_right_out, delta_t_right, true);
+        std::cout<< "Measurement vecotr right is: " << toe_est.size() << "x : " << toe_est[0] << " y: " << toe_est[1] << " z: " << toe_est[2] << std::endl;
+        kFilter_LSR_right->update(toe_est, x_right_out, delta_t_right, true);
         x_hats[1] = x_right_out;
         geometry_msgs::PointStamped right_msg = vecToPointStamped(x_right_out, msg.header);
+        previous_T_right_seq = ros::Time::now();
         pub_right_toe_seq.publish(right_msg);
         mtx_right.unlock();
     }    
@@ -532,7 +558,7 @@ int main (int argc, char** argv) {
     
     int m = 0;
     std::vector<double> R_vec;
-    if(nh.getParam("/toe_detection/KalmanFilter/m",m) && nh.getParam("/toe_detection/KalmanFilter/R_loc",R_vec)) {
+    if(nh.getParam("/toe_detection/KalmanFilter/m",m) && nh.getParam("/toe_detection/2R",R_vec)) {
      R_loc = Eigen::MatrixXd(m,m);
      fromStdVectorToEigenMatrix(R_vec, R_loc, m, m, "R_loc");
      sequentiell = true;
@@ -541,7 +567,7 @@ int main (int argc, char** argv) {
     }
     else {
      ROS_ERROR("Parameters for sequentiell Kalman not loaded");
-     ROS_INFO("M loaded ? %d; R loaded ? %d", nh.getParam("/toe_detection/KalmanFilter/m",m), nh.getParam("/toe_detection/KalmanFilter/R_loc",R_vec));
+     ROS_INFO("M loaded ? %d; R loaded ? %d", nh.getParam("/toe_detection/KalmanFilter/m",m), nh.getParam("/toe_detection/KalmanFilter/2R",R_vec));
     }
     
     int a = 1, b = 2;
