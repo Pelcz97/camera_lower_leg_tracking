@@ -156,6 +156,9 @@ target_link_libraries(feet_detection_node ${catkin_LIBRARIES})
 add_executable(toe_detection_node src/toe_detection_node.cpp)
 target_link_libraries(toe_detection_node ${catkin_LIBRARIES})
 
+add_executable(fix_foot_axis src/fix_foot_axis.cpp)
+target_link_libraries(fix_foot_axis ${catkin_LIBRARIES})
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
