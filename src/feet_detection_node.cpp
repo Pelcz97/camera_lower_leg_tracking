@@ -1,16 +1,18 @@
 #include <pcl_types.h>
 
 
-int Icp_error_count = 0, icp_count = 0, init_frontal_frame = 0, init_side_frame = 0;
+// int Icp_error_count = 0, icp_count = 0;
+int init_frontal_frame = 0, init_side_frame = 0;
 
-float frame_cnt = 0;
+// float frame_cnt = 0;
 
-float leftAnkleDistance, leftHeelDistance, leftToeDistance, rightToeDistance, rightAnkleDistance, rightHeelDistance;
+// float leftAnkleDistance, leftHeelDistance, leftToeDistance, rightToeDistance, rightAnkleDistance, rightHeelDistance;
 
 
 geometry_msgs::TransformStamped transformStamped;
 ros::Publisher pub_left_leg, pub_right_leg, pub_left_toe, pub_right_toe, pub_right_sole, pub_left_sole, pub_LeftFoot, pub_RightFoot, pub_left_heel, pub_right_heel, pub_left_ankle, pub_right_ankle, pub_foot_strip, pub_RightLeg, pub_LeftLeg, pub_left_foot_axis, pub_right_foot_axis, pub_right_laserscanner, pub_left_laserscanner;
-geometry_msgs::PointStamped oldLeft,oldRight, oldLeftAnkle, oldRightAnkle, oldLeftHeel, oldRightHeel;
+geometry_msgs::PointStamped oldLeft,oldRight;
+// geometry_msgs::PointStamped oldLeftAnkle, oldRightAnkle, oldLeftHeel, oldRightHeel;
 Cloud_ptr right_foot_reference, left_foot_reference, right_leg_reference, left_leg_reference;
 Cloud side_init_cloud;
 bool init_front_done = false, init_side_done = false;
@@ -151,7 +153,7 @@ std::vector<float> findLegAxis(Cloud input, bool left) {
 
 Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
-    icp_count++;
+//     icp_count++;
     pcl::IterativeClosestPoint<Point, Point> icp;
     if (left) icp.setInputSource(left_foot_reference);
     else icp.setInputSource(right_foot_reference);
@@ -169,7 +171,7 @@ Eigen::Matrix4f findFootTransformation(Cloud input, int left) {
 
         return transformation;
     }
-    else Icp_error_count++;
+//     else Icp_error_count++;
 }
 
 std::vector<Cloud> findOrientation(Cloud fst_leg, Cloud snd_leg) {
@@ -546,7 +548,7 @@ visualization_msgs::Marker findLegAxisMarker(geometry_msgs::PointStamped ankle, 
     }
 
     if (leg_coefficients.empty() && transformation(3,3) == 1) {
-        ROS_INFO("USING FOOT TRANS FOR AXIS");
+//         ROS_INFO("USING FOOT TRANS FOR AXIS");
         Eigen::Vector3f zAxis(0.0, 0.0, 1.0);
         Eigen::MatrixXf  rotation = transformation;
         removeRow(rotation, 3);
@@ -579,7 +581,7 @@ geometry_msgs::PointStamped findHeel(geometry_msgs::PointStamped toe, Eigen::Mat
         heel.point.z = toe.point.z + heelDirection(2);
     }
     else {
-        ROS_WARN("COULD NOT FIND HEEL! THIS WILL BE AN INACCURATE TRANSFORMATION");
+//         ROS_WARN("COULD NOT FIND HEEL! THIS WILL BE AN INACCURATE TRANSFORMATION");
         heel.point.x = toe.point.x + footVector(0);
         heel.point.y = toe.point.y;
         heel.point.z = toe.point.z;
@@ -629,7 +631,7 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 //     ros::Time end_clustering = ros::Time::now();
     if (init_side_done && !init_front_done && !legs.empty()) front_init(legs[0], legs[1]);
     if (init() && !legs.empty()) {
-        frame_cnt += 1;
+//         frame_cnt += 1;
         Cloud left_leg = legs[0];
         Cloud right_leg = legs[1];
         if (!left_leg.empty()) {
@@ -647,16 +649,6 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             kFilter_left->update(data_in_left, data_out_left, delta_t_left, true);
             previos_T_left = now_left;
 
-            if (std::pow(left_heel.point.x - data_out_left[0],2) + std::pow(left_heel.point.y - data_out_left[1],2) + std::pow(left_heel.point.z - data_out_left[2],2)>= footLength + 0.02) {
-                ROS_WARN("KalmanFilter_Left resetErrorCovAndState this iteration does not use the KalmanFilter");
-                kFilter_left->resetErrorCovAndState();
-                left_heel.point.x = data_out_left[0];
-                left_heel.point.y = data_out_left[1];
-                left_heel.point.z = data_out_left[2];
-            }
-
-
-
             geometry_msgs::PointStamped left_ankle = findAnkle(left_heel, leftFootTrans);
             std::vector<float> leg_coefficients = findLegAxis(left_leg, true);
 //            ROS_INFO("The leg diameter is %f! The Direction is %f, %f, %f", leg_coefficients.values[6], leg_coefficients.values[3], leg_coefficients.values[4], leg_coefficients.values[5]);
@@ -673,16 +665,16 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_left_ankle.publish(left_ankle);
             if (marker.points[1].x != 0.0) pub_left_foot_axis.publish(marker);
 
-            if (frame_cnt != 1) {
+//             if (frame_cnt != 1) {
+// 
+//                 leftHeelDistance += distancePoints(oldLeftHeel, left_heel);
+//                 leftAnkleDistance += distancePoints(oldLeftAnkle, left_ankle);
+// 
+//                 ROS_INFO("Avg Distances: LeftHeel %f, LeftAnkle %f", leftHeelDistance/frame_cnt, leftAnkleDistance/frame_cnt);
+//             }
 
-                leftHeelDistance += distancePoints(oldLeftHeel, left_heel);
-                leftAnkleDistance += distancePoints(oldLeftAnkle, left_ankle);
-
-                ROS_INFO("Avg Distances: LeftHeel %f, LeftAnkle %f", leftHeelDistance/frame_cnt, leftAnkleDistance/frame_cnt);
-            }
-
-            oldLeftHeel = left_heel;
-            oldLeftAnkle = left_ankle;
+//             oldLeftHeel = left_heel;
+//             oldLeftAnkle = left_ankle;
         }
         if (init() && !right_leg.empty()) {
 //             transformations_right_start = ros::Time::now();
@@ -699,14 +691,6 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             kFilter_right->update(data_in_right, data_out_right, delta_t_right, true);
             previos_T_right = now_right;
 
-            if (std::pow(right_heel.point.x - data_out_right[0],2) + std::pow(right_heel.point.y - data_out_right[1],2) + std::pow(right_heel.point.z - data_out_right[2],2)>= footLength + 0.02) {
-                ROS_WARN("KalmanFilter_Right resetErrorCovAndState this iteration does not use the KalmanFilter");
-                kFilter_right->resetErrorCovAndState();
-                right_heel.point.x = data_out_right[0];
-                right_heel.point.y = data_out_right[1];
-                right_heel.point.z = data_out_right[2];
-            }
-
 
             geometry_msgs::PointStamped right_ankle = findAnkle(right_heel, rightFootTrans);
             std::vector<float> leg_coefficients = findLegAxis(right_leg, false);
@@ -722,20 +706,19 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
             pub_right_ankle.publish(right_ankle);
             if (marker.points[1].x != 0.0) pub_right_foot_axis.publish(marker);
 
-            if (frame_cnt != 1) {
+//             if (frame_cnt != 1) {
+// 
+//                 rightHeelDistance += distancePoints(oldRightHeel, right_heel);
+//                 rightAnkleDistance += distancePoints(oldRightAnkle, right_ankle);
+// 
+//                 ROS_INFO("Avg Distances: RightHeel %f, RightAnkle %f",  rightHeelDistance/frame_cnt, rightAnkleDistance/frame_cnt);
+//             }
 
-                rightHeelDistance += distancePoints(oldRightHeel, right_heel);
-                rightAnkleDistance += distancePoints(oldRightAnkle, right_ankle);
-
-                ROS_INFO("Avg Distances: RightHeel %f, RightAnkle %f",  rightHeelDistance/frame_cnt, rightAnkleDistance/frame_cnt);
-            }
-
-            oldRight = right_toe;
-            oldRightAnkle = right_ankle;
-            oldRightHeel = right_heel;
+//             oldRightAnkle = right_ankle;
+//             oldRightHeel = right_heel;
 
         }
-        ROS_INFO("This was Frame %f", frame_cnt);
+//         ROS_INFO("This was Frame %f", frame_cnt);
 
     }
 //     ros::Time end = ros::Time::now();
@@ -754,33 +737,33 @@ void cloud_cb (sensor_msgs::PointCloud2 input_cloud) {
 }
 
 
-void laserscanner_fst_leg_cb(std_msgs::Float64MultiArray input) {
-//     ROS_INFO("DATA FROM FST LEG CAME IN");
-    laserscanner_fst_leg_x = input.data[0];
-    laserscanner_fst_leg_y = input.data[1];
-    geometry_msgs::PointStamped point;
-    point.header.stamp = ros::Time::now();
-    point.header.seq++;
-    point.header.frame_id = "base_link";
-    point.point.x = input.data[0];
-    point.point.y = input.data[1];
-    point.point.z = 0.18;
-    pub_right_laserscanner.publish(point);
-}
-
-void laserscanner_snd_leg_cb(std_msgs::Float64MultiArray input) {
-//     ROS_INFO("DATA FROM SND LEG CAME IN");
-    laserscanner_snd_leg_x = input.data[0];
-    laserscanner_snd_leg_y = input.data[1];
-    geometry_msgs::PointStamped point;
-    point.header.stamp = ros::Time::now();
-    point.header.seq++;
-    point.header.frame_id = "base_link";
-    point.point.x = input.data[0];
-    point.point.y = input.data[1];
-    point.point.z = 0.18;
-    pub_left_laserscanner.publish(point);
-}
+// void laserscanner_fst_leg_cb(std_msgs::Float64MultiArray input) {
+// //     ROS_INFO("DATA FROM FST LEG CAME IN");
+//     laserscanner_fst_leg_x = input.data[0];
+//     laserscanner_fst_leg_y = input.data[1];
+//     geometry_msgs::PointStamped point;
+//     point.header.stamp = ros::Time::now();
+//     point.header.seq++;
+//     point.header.frame_id = "base_link";
+//     point.point.x = input.data[0];
+//     point.point.y = input.data[1];
+//     point.point.z = 0.18;
+//     pub_right_laserscanner.publish(point);
+// }
+// 
+// void laserscanner_snd_leg_cb(std_msgs::Float64MultiArray input) {
+// //     ROS_INFO("DATA FROM SND LEG CAME IN");
+//     laserscanner_snd_leg_x = input.data[0];
+//     laserscanner_snd_leg_y = input.data[1];
+//     geometry_msgs::PointStamped point;
+//     point.header.stamp = ros::Time::now();
+//     point.header.seq++;
+//     point.header.frame_id = "base_link";
+//     point.point.x = input.data[0];
+//     point.point.y = input.data[1];
+//     point.point.z = 0.18;
+//     pub_left_laserscanner.publish(point);
+// }
 
 
 bool init_reset(std_srvs::Trigger::Request& request, std_srvs::Trigger::Response& response) {
